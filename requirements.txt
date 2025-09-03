@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+alembic
+passlib[bcrypt]
+python-jose[cryptography]
+pydantic
+pydantic-settings
+google-generativeai
+pinecone-client
+python-dotenv
+python-multipart
+pinecone
+pydantic[email]
