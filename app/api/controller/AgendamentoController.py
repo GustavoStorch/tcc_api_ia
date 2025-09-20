@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.base import get_db
 from app.api.deps import get_current_user
 from app.models import UsuarioModel
 from app.dto import AgendamentoDTO as agendamento_schema
+from app.services import AgendamentoService
 
 router = APIRouter()
 
@@ -16,18 +17,12 @@ def criar_agendamento(
     current_user: UsuarioModel.Usuario = Depends(get_current_user)
 ):
     """
-    Cria um novo agendamento no sistema.
+    Cria um novo agendamento no sistema e no Google Calendar.
     """
-    # (A lógica de criação de agendamento será implementada aqui)
-    print(f"Novo agendamento criado para o paciente {agendamento_data.paciente_id} com o profissional {agendamento_data.profissional_id}")
-    
-    # Exemplo de retorno estático (deve ser substituído pela lógica real)
-    return {
-        "id": 101,
-        "paciente_id": agendamento_data.paciente_id,
-        "profissional_id": agendamento_data.profissional_id,
-        "horario_inicio": agendamento_data.horario_inicio,
-        "horario_fim": agendamento_data.horario_inicio,
-        "valor_cobrado": 350.00,
-        "situacao": "Agendado"
-    }
+    try:
+        novo_agendamento = AgendamentoService.criar_novo_agendamento(db=db, agendamento_data=agendamento_data)
+        return novo_agendamento
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ocorreu um erro ao criar o agendamento.")

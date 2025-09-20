@@ -1,5 +1,10 @@
 from sqlalchemy import Column, Integer, DateTime, Enum as SQLAlchemyEnum, ForeignKey, Numeric
 from .base import Base
+from sqlalchemy.orm import relationship 
+from .ClinicaModel import Clinica
+from .PacienteModel import Paciente
+from .ProfissionalModel import Profissional
+from .TipoConsultaModel import TipoConsulta
 import enum
 
 class TipoSituacaoAgendamento(str, enum.Enum):
@@ -21,3 +26,9 @@ class Agendamento(Base):
     horario_fim = Column(DateTime(timezone=True), nullable=False)
     valor_cobrado = Column(Numeric(10, 2), nullable=False)
     situacao = Column(SQLAlchemyEnum(TipoSituacaoAgendamento, name="tipo_situacao_agendamento"), nullable=False, default=TipoSituacaoAgendamento.Agendado)
+
+    clinica = relationship("Clinica")
+    paciente = relationship("Paciente")
+    profissional = relationship("Profissional")
+    tipoConsulta = relationship("TipoConsulta")
+    

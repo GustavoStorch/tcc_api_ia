@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 import google.generativeai as genai
 from pinecone import Pinecone
+from sentence_transformers import SentenceTransformer
 from ..core.config import settings
 
 # Configuração das ferramentas de IA
@@ -12,6 +13,13 @@ try:
 except Exception as e:
     print(f"Erro ao inicializar serviços de IA: {e}")
     pinecone_index = None
+
+# Carregamento do modelo local de embeddings
+try:
+    embedder = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+except Exception as e:
+    print(f"Erro ao carregar modelo embeddings: {e}")
+    embedder = None
 
 
 def sincronizar_base_conhecimento(db: Session):
@@ -89,8 +97,11 @@ def sincronizar_base_conhecimento(db: Session):
 
         print(f"Total de {len(fatos_finais)} fatos gerados para indexação.")
 
-        # Gera os embeddings em lote com o Gemini
-        embedding_result = genai.embed_content(model="models/embedding-001", content=fatos_finais)
+        # Gera embeddings localmente
+        embedding_result = embedder.encode(fatos_finais, convert_to_numpy=True)
+
+        # # Gera os embeddings em lote com o Gemini
+        # embedding_result = genai.embed_content(model="models/embedding-001", content=fatos_finais)
         
         vetores_para_salvar = []
         for i, texto in enumerate(fatos_finais):
@@ -98,16 +109,19 @@ def sincronizar_base_conhecimento(db: Session):
             vetor_id = f"fato_{hash(texto)}"
             vetores_para_salvar.append({
                 "id": vetor_id,
-                "values": embedding_result['embedding'][i],
+                "values": embedding_result[i].tolist(),
                 "metadata": {"texto": texto}
             })
 
         if vetores_para_salvar:
             # Apaga os dados antigos
-            pinecone_index.delete(delete_all=True)
+            try:
+                pinecone_index.delete(delete_all=True, namespace="")
+            except Exception as e:
+                print(f"Aviso: não foi possível limpar namespace (pode não existir ainda): {e}")
             
             # Insere os novos dados
-            pinecone_index.upsert(vectors=vetores_para_salvar)
+            pinecone_index.upsert(vectors=vetores_para_salvar, namespace="")
             print(f"Sincronização concluída: {len(vetores_para_salvar)} fatos indexados no Pinecone.")
 
     except Exception as e:

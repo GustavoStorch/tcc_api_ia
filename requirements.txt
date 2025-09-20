@@ -13,3 +13,7 @@ python-dotenv
 python-multipart
 pinecone
 pydantic[email]
+google-api-python-client 
+google-auth-httplib2 
+google-auth-oauthlib
+sentence-transformers

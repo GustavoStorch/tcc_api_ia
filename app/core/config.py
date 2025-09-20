@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str
     PINECONE_API_KEY: str
     PINECONE_INDEX_NAME: str = "clinica-index"
+    GOOGLE_CALENDAR_ID: str 
+    GOOGLE_SERVICE_ACCOUNT_FILE: str = "service-account.json"
 
     class Config:
         env_file = ".env"

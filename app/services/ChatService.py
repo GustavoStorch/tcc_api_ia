@@ -8,6 +8,7 @@ import json
 from ..core.config import settings
 from ..models import AgendamentoModel, GradeHorariosModel
 from ..repository.ProfissionalRepository import profissional_repo 
+from ..services.SincronizacaoVetorialService import embedder
 
 # Inicializa o Pinecone e o Gemini
 try:
@@ -103,8 +104,9 @@ def _handle_schedule_query(entities: dict, db: Session) -> dict:
 
 # Processamento utilizando a pipeline RAG
 def _handle_rag_query(query: str) -> dict:
-    query_embedding_result = genai.embed_content(model="models/embedding-001", content=query)
-    query_vector = query_embedding_result['embedding']
+    # query_embedding_result = genai.embed_content(model="models/embedding-001", content=query)
+    # query_vector = query_embedding_result['embedding']
+    query_vector = embedder.encode([query], convert_to_numpy=True)[0].tolist()
     query_results = pinecone_index.query(vector=query_vector, top_k=5, include_metadata=True)
     context_list = [match['metadata']['texto'] for match in query_results['matches']]
     context_str = "\n- ".join(context_list)
