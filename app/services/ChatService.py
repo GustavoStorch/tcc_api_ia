@@ -15,7 +15,7 @@ try:
     genai.configure(api_key=settings.GOOGLE_API_KEY)
     pc = Pinecone(api_key=settings.PINECONE_API_KEY)
     pinecone_index = pc.Index(settings.PINECONE_INDEX_NAME)
-    intent_model = genai.GenerativeModel('gemini-1.5-flash')
+    intent_model = genai.GenerativeModel('gemini-2.5-flash')
 except Exception as e:
     print(f"Erro ao inicializar serviços de IA: {e}")
     pinecone_index = None
@@ -119,7 +119,7 @@ def _handle_rag_query(query: str) -> dict:
     PERGUNTA:
     {query}
     """
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     response = model.generate_content(prompt)
     return {"answer": response.text, "context": context_list}
 

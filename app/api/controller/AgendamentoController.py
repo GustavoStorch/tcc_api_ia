@@ -9,16 +9,13 @@ from app.services import AgendamentoService
 
 router = APIRouter()
 
-# Mantenha apenas a função de criar agendamento.
+# Define rota que cria o agendamento
 @router.post("/", response_model=agendamento_schema.AgendamentoRead, status_code=status.HTTP_201_CREATED)
 def criar_agendamento(
     agendamento_data: agendamento_schema.AgendamentoCreate,
     db: Session = Depends(get_db),
     current_user: UsuarioModel.Usuario = Depends(get_current_user)
 ):
-    """
-    Cria um novo agendamento no sistema e no Google Calendar.
-    """
     try:
         novo_agendamento = AgendamentoService.criar_novo_agendamento(db=db, agendamento_data=agendamento_data)
         return novo_agendamento

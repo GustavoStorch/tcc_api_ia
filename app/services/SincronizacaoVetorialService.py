@@ -30,7 +30,6 @@ def sincronizar_base_conhecimento(db: Session):
     try:
         print("Iniciando a sincronização da base de conhecimento...")
         
-        # Consulta as informações do Postgress referente ao profissional
         query = text("""
         SELECT 
             p.codprofissional, 
@@ -100,12 +99,11 @@ def sincronizar_base_conhecimento(db: Session):
         # Gera embeddings localmente
         embedding_result = embedder.encode(fatos_finais, convert_to_numpy=True)
 
-        # # Gera os embeddings em lote com o Gemini
+        # Gera os embeddings em lote com o Gemini - Retirado esse modelo pois o atingi o limite de cotas do embedding do gemini.
         # embedding_result = genai.embed_content(model="models/embedding-001", content=fatos_finais)
         
         vetores_para_salvar = []
         for i, texto in enumerate(fatos_finais):
-            # Cria um ID único para cada fato baseado no seu conteúdo
             vetor_id = f"fato_{hash(texto)}"
             vetores_para_salvar.append({
                 "id": vetor_id,

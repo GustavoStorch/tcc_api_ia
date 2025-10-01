@@ -7,6 +7,7 @@ from app.models import UsuarioModel
 
 router = APIRouter()
 
+# Define rota que cria a importação do postgress para o pinecone
 @router.post("/vector-db", status_code=status.HTTP_202_ACCEPTED)
 def trigger_sync(
     background_tasks: BackgroundTasks, 

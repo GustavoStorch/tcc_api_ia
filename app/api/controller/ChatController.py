@@ -9,6 +9,7 @@ from app.models import UsuarioModel
 
 router = APIRouter()
 
+# Define rota que cria o chat/comunicação do assistente.
 @router.post("/query", response_model=ChatQueryResponse)
 def handle_chat_query(
     request: ChatQueryRequest,

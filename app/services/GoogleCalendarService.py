@@ -5,9 +5,7 @@ from ..core.config import settings
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 def create_calendar_event(summary: str, start_time: str, end_time: str, description: str = None, attendees: list = None):
-    """
-    Cria um novo evento na agenda do Google.
-    """
+    # Criação de um novo evento dentro do Google Calendar.
     try:
         creds = service_account.Credentials.from_service_account_file(
             settings.GOOGLE_SERVICE_ACCOUNT_FILE, scopes=SCOPES)

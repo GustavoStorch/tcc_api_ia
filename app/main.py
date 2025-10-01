@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.controller import AgendamentoController, AuthController, ChatController, SinconizacaoController, UsuarioController
+from app.api.controller import AgendamentoController, AuthController, ChatController, SinconizacaoController, UsuarioController, TreinamentoController
 
 app = FastAPI(
     title="API da Clínica Médica",
@@ -13,6 +13,8 @@ app.include_router(UsuarioController.router, prefix="/users", tags=["Utilizadore
 app.include_router(SinconizacaoController.router, prefix="/sync", tags=["Sincronização"]) 
 app.include_router(ChatController.router, prefix="/chat", tags=["Chat"])
 app.include_router(AgendamentoController.router, prefix="/agendamentos", tags=["Agendamentos"])
+app.include_router(TreinamentoController.router, prefix="/upload-treinamento", tags=["Treinamento"])
+app.include_router(TreinamentoController.router, prefix="/modelo", tags=["Treinamento"])
 
 @app.get("/", tags=["Root"])
 def read_root():

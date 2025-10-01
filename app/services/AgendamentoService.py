@@ -49,7 +49,6 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
             description=description
         )
     except Exception as e:
-        #Avaliar para tratar como Pendente de Integração no google calendário caso dê erro.
         print(f"ATENÇÃO: Agendamento {novo_agendamento_db.codagendamento} salvo no DB, mas falhou ao criar no Google Calendar. Erro: {e}")
 
     return novo_agendamento_db
