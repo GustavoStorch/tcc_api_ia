@@ -2,15 +2,15 @@ from pydantic import BaseModel
 from datetime import datetime
 
 class AgendamentoCreate(BaseModel):
-    codpaciente: int
-    codprofissional: int
-    codtipoconsulta: int
+    nomepaciente: str
+    nomeprofissional: str
+    nometipoconsulta: str
     codclinica: int
     horario_inicio: datetime 
 
 class AgendamentoRead(BaseModel):
     codagendamento: int
-    codpaciente: int
+    codpaciente: int 
     codprofissional: int
     horario_inicio: datetime
     horario_fim: datetime

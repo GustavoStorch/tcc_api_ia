@@ -2,38 +2,50 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 
 from ..repository.AgendamentoRepository import agendamento_repo
-from ..models import AgendamentoModel, ProfissionalModel, TipoConsultaModel, ValorConsultaModal 
+from ..models import AgendamentoModel, ProfissionalModel, TipoConsultaModel, ValorConsultaModal, PacienteModel
 from ..dto import AgendamentoDTO
 from . import GoogleCalendarService
 
 def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.AgendamentoCreate) -> AgendamentoModel.Agendamento:
     # Busca as informações de Profissional, Tipo de Consulta e Valor da Consulta.
-    profissional = db.query(ProfissionalModel.Profissional).filter(ProfissionalModel.Profissional.codprofissional == agendamento_data.codprofissional).first()
-    tipoConsulta = db.query(TipoConsultaModel.TipoConsulta).filter(TipoConsultaModel.TipoConsulta.codtipoconsulta == agendamento_data.codtipoconsulta).first() 
-    valor_consulta = db.query(ValorConsultaModal.ValorConsulta)\
-    .filter(ValorConsultaModal.ValorConsulta.codprofissional == agendamento_data.codprofissional)\
-    .filter(ValorConsultaModal.ValorConsulta.codtipoconsulta == agendamento_data.codtipoconsulta)\
-    .first()
+   
+    paciente = db.query(PacienteModel.Paciente).filter(PacienteModel.Paciente.nome == agendamento_data.nomepaciente).first()
+    profissional = db.query(ProfissionalModel.Profissional).filter(ProfissionalModel.Profissional.nome == agendamento_data.nomeprofissional).first()
+    tipoConsulta = db.query(TipoConsultaModel.TipoConsulta).filter(TipoConsultaModel.TipoConsulta.nome == agendamento_data.nometipoconsulta).first()
+    # profissional = db.query(ProfissionalModel.Profissional).filter(ProfissionalModel.Profissional.codprofissional == agendamento_data.codprofissional).first()
+    # tipoConsulta = db.query(TipoConsultaModel.TipoConsulta).filter(TipoConsultaModel.TipoConsulta.codtipoconsulta == agendamento_data.codtipoconsulta).first() 
     
+    if not paciente:
+        raise ValueError("Paciente não encontrado.")
     if not profissional:
         raise ValueError("Profissional não encontrado.")
     if not tipoConsulta:
         raise ValueError("Tipo de Consulta não encontrado.")
+    
+    valor_consulta = db.query(ValorConsultaModal.ValorConsulta)\
+    .filter(ValorConsultaModal.ValorConsulta.codprofissional == profissional.codprofissional)\
+    .filter(ValorConsultaModal.ValorConsulta.codtipoconsulta == tipoConsulta.codtipoconsulta)\
+    .first()
+
     if not valor_consulta:
         raise ValueError("Valor da COnsulta não encontrado.")
 
     # Calcular horário do fim da consulta
     horario_fim = agendamento_data.horario_inicio + timedelta(minutes=tipoConsulta.duracao_padrao_minutos)
 
-    dados_para_db = agendamento_data.model_dump() 
-    dados_para_db['horario_fim'] = horario_fim
-    dados_para_db['valor_cobrado'] = valor_consulta.valor
-
     # Criação da instância do modelo SQLAlchemy
-    db_agendamento = AgendamentoModel.Agendamento(**dados_para_db)
+    db_agendamento = AgendamentoModel.Agendamento(
+        codpaciente=paciente.codpaciente,
+        codprofissional=profissional.codprofissional,
+        codtipoconsulta=tipoConsulta.codtipoconsulta,
+        codclinica=agendamento_data.codclinica,
+        horario_inicio=agendamento_data.horario_inicio,
+        horario_fim=horario_fim,
+        valor_cobrado=valor_consulta.valor
+    )
 
     novo_agendamento_db = agendamento_repo.criar_agendamento(
-        db=db, 
+        db=db,  
         agendamento=db_agendamento
     )
 
