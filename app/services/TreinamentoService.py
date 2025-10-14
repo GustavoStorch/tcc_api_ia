@@ -29,12 +29,16 @@ def processar_e_treinar_modelo():
         # Engenharia de Features
         df['horario_inicio'] = pd.to_datetime(df['horario_inicio'], errors='coerce', utc=True)
         df['data_criacao'] = pd.to_datetime(df['data_criacao'], errors='coerce', utc=True)
+
+        df.dropna(subset=['horario_inicio', 'data_criacao'], inplace=True)
+
         df['no_show'] = df['situacao_agendamento'].apply(lambda x: 1 if x in ['Nao Compareceu', 'Cancelado Pelo Paciente'] else 0)
         
         # Realiza a normalização para meia noite e calcula a diferenã em dias.
         df['antecedencia_dias'] = (df['horario_inicio'].dt.normalize() - df['data_criacao'].dt.normalize()).dt.days
-        
         df['dia_da_semana'] = df['horario_inicio'].dt.weekday
+        df['mes'] = df['horario_inicio'].dt.month
+        df['hora_do_dia'] = df['horario_inicio'].dt.hour
         
         df = df.sort_values(by='horario_inicio')
         df['historico_no_shows'] = df.groupby('codpaciente')['no_show'].cumsum() - df['no_show']
@@ -46,7 +50,7 @@ def processar_e_treinar_modelo():
         # Realiza a preparação dos Dados e do Treinamento
         
         features = [
-            'antecedencia_dias', 'dia_da_semana',
+            'antecedencia_dias', 'dia_da_semana', 'mes', 'hora_do_dia',
             'historico_no_shows', 'historico_agendamentos', 'taxa_no_show'
         ]
         target = 'no_show'

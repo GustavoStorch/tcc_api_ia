@@ -2,7 +2,6 @@ from pydantic import BaseModel
 
 class PredictionFeatures(BaseModel):
     antecedencia_dias: int
-    idade: int
     dia_da_semana: int
     mes: int
     hora_do_dia: int

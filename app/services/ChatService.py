@@ -7,7 +7,8 @@ import json
 
 from ..core.config import settings
 from ..models import AgendamentoModel, GradeHorariosModel
-from ..repository.ProfissionalRepository import profissional_repo 
+from ..repository.ProfissionalRepository import profissional_repo
+from ..repository.PacienteRepository import paciente_repo 
 from ..services.SincronizacaoVetorialService import embedder
 
 # Inicializa o Pinecone e o Gemini
@@ -24,23 +25,48 @@ except Exception as e:
 # Identifica a intenção da mensagem usando o gemini
 def _get_intent_and_entities(query: str) -> dict:
     today = date.today().strftime('%Y-%m-%d')
+    # prompt = f"""
+    # Analise a pergunta do utilizador e classifique a sua intenção.
+    # As intenções possíveis são: 'consulta_horarios' ou 'informacao_geral'.
+
+    # Se a intenção for 'consulta_horarios', extraia o nome do profissional e a data desejada no formato AAAA-MM-DD.
+    # Considere que a data de hoje é {today}.
+    # Exemplos de datas relativas: 'amanhã', 'depois de amanhã', 'próxima segunda-feira'.
+
+    # A sua resposta DEVE ser apenas um objeto JSON válido.
+
+    # Exemplo 1:
+    # Pergunta: "Quais os horários da Dra. Ana para amanhã?"
+    # Resposta: {{"intent": "consulta_horarios", "entities": {{"nome_profissional": "Dra. Ana", "data": "2025-09-01"}}}}
+
+    # Exemplo 2:
+    # Pergunta: "Qual o CRM do Dr. Carlos?"
+    # Resposta: {{"intent": "informacao_geral", "entities": {{}}}}
+
+    # Pergunta do Utilizador: "{query}"
+    # """
     prompt = f"""
     Analise a pergunta do utilizador e classifique a sua intenção.
-    As intenções possíveis são: 'consulta_horarios' ou 'informacao_geral'.
+    As intenções possíveis são: 'criar_agendamento', 'consulta_horarios', ou 'informacao_geral'.
 
-    Se a intenção for 'consulta_horarios', extraia o nome do profissional e a data desejada no formato AAAA-MM-DD.
+    Se a intenção for 'criar_agendamento' ou 'consulta_horarios', extraia o nome do profissional e a data desejada (no formato AAAA-MM-DD).
+    Se a intenção for 'criar_agendamento', extraia também a hora (no formato HH:MM).
     Considere que a data de hoje é {today}.
-    Exemplos de datas relativas: 'amanhã', 'depois de amanhã', 'próxima segunda-feira'.
+    Exemplos de datas relativas: 'amanhã' deve ser { (date.today() + timedelta(days=1)).strftime('%Y-%m-%d') }, 'depois de amanhã' deve ser { (date.today() + timedelta(days=2)).strftime('%Y-%m-%d') }.
 
     A sua resposta DEVE ser apenas um objeto JSON válido.
 
     Exemplo 1:
     Pergunta: "Quais os horários da Dra. Ana para amanhã?"
-    Resposta: {{"intent": "consulta_horarios", "entities": {{"nome_profissional": "Dra. Ana", "data": "2025-09-01"}}}}
+    Resposta: {{"intent": "consulta_horarios", "entities": {{"nome_profissional": "Dra. Ana", "data": "{(date.today() + timedelta(days=1)).strftime('%Y-%m-%d')}"}}}}
 
     Exemplo 2:
     Pergunta: "Qual o CRM do Dr. Carlos?"
     Resposta: {{"intent": "informacao_geral", "entities": {{}}}}
+
+    Exemplo 3:
+    Pergunta: "Gostaria de marcar uma consulta com o Dr. Ricardo Mendes para sexta-feira às 15:30."
+    Resposta: {{"intent": "criar_agendamento", "entities": {{"nome_profissional": "Dr. Ricardo Mendes", "data": "2025-10-10", "hora": "15:30"}}}}
 
     Pergunta do Utilizador: "{query}"
     """
@@ -123,8 +149,100 @@ def _handle_rag_query(query: str) -> dict:
     response = model.generate_content(prompt)
     return {"answer": response.text, "context": context_list}
 
+##### FUNCIONAL
+# def _handle_create_appointment(entities: dict, db: Session) -> dict:
+#     nome_profissional = entities.get("nome_profissional")
+#     data_str = entities.get("data")
+#     hora_str = entities.get("hora")
+#     tipo_consulta = entities.get("tipo_consulta", "Primeira Consulta")
 
-def process_chat_query(query: str, db: Session) -> dict:
+#     if not all([nome_profissional, data_str, hora_str]):
+#         return {
+#             "answer": "Para criar um agendamento, preciso do nome do profissional, da data e da hora.",
+#             "context": [],
+#             "action_type": None,
+#             "action_data": None
+#         }
+
+#     try:
+#         horario_inicio = datetime.fromisoformat(f"{data_str}T{hora_str}:00").isoformat()
+#     except ValueError:
+#         return {
+#             "answer": f"A data '{data_str}' ou hora '{hora_str}' não parecem estar num formato válido.",
+#             "context": [],
+#             "action_type": None,
+#             "action_data": None
+#         }
+
+#     dados_agendamento = {
+#         "nomepaciente": "Gustavo Storch", 
+#         "nomeprofissional": nome_profissional,
+#         "nometipoconsulta": tipo_consulta,
+#         "codclinica": 1, 
+#         "horario_inicio": horario_inicio
+#     }
+    
+#     resposta_para_utilizador = f"Entendido! A preparar o agendamento com {nome_profissional} para {data_str} às {hora_str}. Só um momento."
+
+#     # Retorna a estrutura completa
+#     return {
+#         "answer": resposta_para_utilizador,
+#         "context": [],
+#         "action_type": "CRIAR_AGENDAMENTO",
+#         "action_data": dados_agendamento
+#     }
+
+def _handle_create_appointment(entities: dict, telegram_id: int, db: Session) -> dict:
+    # 1. Busca o paciente pelo telegram_id
+    paciente = paciente_repo.get_by_telegram_id(db, telegram_id=telegram_id)
+    if not paciente:
+        return {
+            "answer": "Não consegui encontrar o seu registo de paciente. Por favor, contacte a clínica.",
+            "context": [], "action_type": None, "action_data": None
+        }
+
+    # 2. VERIFICA SE O PACIENTE JÁ DEU PERMISSÃO (se tem o token)
+    if not paciente.token:
+        # Se não tiver o token, a ação é pedir autorização.
+        auth_link = f"http://127.0.0.1:8000/auth/google/login?telegram_id={telegram_id}"
+        return {
+            "answer": "Para adicionar o agendamento ao seu Google Calendar, preciso da sua permissão. Por favor, clique no link abaixo para autorizar.",
+            "context": [],
+            "action_type": "REQUER_AUTORIZACAO_GCAL",
+            "action_data": {"authorization_url": auth_link}
+        }
+
+    # 3. Se já tem permissão, segue o fluxo normal
+    nome_profissional = entities.get("nome_profissional")
+    data_str = entities.get("data")
+    hora_str = entities.get("hora")
+    tipo_consulta = entities.get("tipo_consulta", "Primeira Consulta")
+
+    if not all([nome_profissional, data_str, hora_str]):
+        return { "answer": "Faltam informações para o agendamento (profissional, data ou hora).", "context": [] }
+
+    try:
+        horario_inicio = datetime.fromisoformat(f"{data_str}T{hora_str}:00").isoformat()
+    except ValueError:
+        return { "answer": f"A data '{data_str}' ou hora '{hora_str}' não são válidas.", "context": [] }
+
+    dados_agendamento = {
+        "nomepaciente": paciente.nome, 
+        "nomeprofissional": nome_profissional,
+        "nometipoconsulta": tipo_consulta,
+        "codclinica": 1, 
+        "horario_inicio": horario_inicio
+    }
+    
+    return {
+        "answer": f"A preparar o agendamento com {nome_profissional} para {data_str} às {hora_str}. Só um momento.",
+        "context": [],
+        "action_type": "CRIAR_AGENDAMENTO",
+        "action_data": dados_agendamento
+    }
+
+
+def process_chat_query(query: str, telegram_id: int, db: Session) -> dict:
     if intent_model is None or pinecone_index is None:
         raise ConnectionError("Serviços de IA não inicializados.")
 
@@ -137,6 +255,9 @@ def process_chat_query(query: str, db: Session) -> dict:
     if intent == "consulta_horarios":
         print("DEBUG: Intenção 'consulta_horarios' detetada.")
         return _handle_schedule_query(entities, db)
+    elif intent == "criar_agendamento":
+        print("DEBUG: Intenção 'criar_agendamento' detetada.")
+        return _handle_create_appointment(entities, telegram_id, db)
     else:
         print("DEBUG: Intenção 'informacao_geral' detetada.")
         return _handle_rag_query(query)

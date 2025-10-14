@@ -3,17 +3,17 @@ from datetime import timedelta
 
 from ..repository.AgendamentoRepository import agendamento_repo
 from ..models import AgendamentoModel, ProfissionalModel, TipoConsultaModel, ValorConsultaModal, PacienteModel
-from ..dto import AgendamentoDTO
+from ..dto import AgendamentoDTO, PredicaoDTO
 from . import GoogleCalendarService
+from zoneinfo import ZoneInfo
+from datetime import datetime
+from ..services.PredicaoService import prediction_service
 
 def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.AgendamentoCreate) -> AgendamentoModel.Agendamento:
     # Busca as informações de Profissional, Tipo de Consulta e Valor da Consulta.
-   
     paciente = db.query(PacienteModel.Paciente).filter(PacienteModel.Paciente.nome == agendamento_data.nomepaciente).first()
     profissional = db.query(ProfissionalModel.Profissional).filter(ProfissionalModel.Profissional.nome == agendamento_data.nomeprofissional).first()
     tipoConsulta = db.query(TipoConsultaModel.TipoConsulta).filter(TipoConsultaModel.TipoConsulta.nome == agendamento_data.nometipoconsulta).first()
-    # profissional = db.query(ProfissionalModel.Profissional).filter(ProfissionalModel.Profissional.codprofissional == agendamento_data.codprofissional).first()
-    # tipoConsulta = db.query(TipoConsultaModel.TipoConsulta).filter(TipoConsultaModel.TipoConsulta.codtipoconsulta == agendamento_data.codtipoconsulta).first() 
     
     if not paciente:
         raise ValueError("Paciente não encontrado.")
@@ -30,19 +30,34 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
     if not valor_consulta:
         raise ValueError("Valor da COnsulta não encontrado.")
 
-    # Calcular horário do fim da consulta
-    horario_fim = agendamento_data.horario_inicio + timedelta(minutes=tipoConsulta.duracao_padrao_minutos)
-
-    # Criação da instância do modelo SQLAlchemy
+    sao_paulo_tz = ZoneInfo('America/Sao_Paulo')
+    naive_start_time = agendamento_data.horario_inicio
+    aware_start_time = naive_start_time.replace(tzinfo=sao_paulo_tz)
+    aware_end_time = aware_start_time + timedelta(minutes=tipoConsulta.duracao_padrao_minutos)
     db_agendamento = AgendamentoModel.Agendamento(
         codpaciente=paciente.codpaciente,
         codprofissional=profissional.codprofissional,
         codtipoconsulta=tipoConsulta.codtipoconsulta,
         codclinica=agendamento_data.codclinica,
-        horario_inicio=agendamento_data.horario_inicio,
-        horario_fim=horario_fim,
+        horario_inicio=aware_start_time,
+        horario_fim=aware_end_time,
         valor_cobrado=valor_consulta.valor
     )
+
+    feature_predicao = PredicaoDTO.PredictionFeatures(
+        antecedencia_dias=(aware_start_time.date() - datetime.now().date()).days,
+        dia_da_semana=aware_start_time.weekday(),
+        mes=aware_start_time.month,
+        hora_do_dia=aware_start_time.hour,
+        historico_no_shows=0, 
+        historico_agendamentos=0,
+        taxa_no_show=0.0
+    )
+
+    resultado_predicao = prediction_service.predict(feature_predicao)
+
+    db_agendamento.probabilidade_no_show = resultado_predicao["probabilidade_no_show"]
+    db_agendamento.risco = resultado_predicao["risco"]
 
     novo_agendamento_db = agendamento_repo.criar_agendamento(
         db=db,  
@@ -52,15 +67,30 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
     # Integra o agendamento no Google calendário.
     try:
         summary = f"Consulta: {profissional.nome}"
-        description = f"Agendamento via API da Clínica. Tipo de Consulta ID: {agendamento_data.codtipoconsulta}"
-        
+        description = f"Agendamento via API da Clínica. Tipo de Consulta: {agendamento_data.nometipoconsulta}"
+
         GoogleCalendarService.create_calendar_event(
             summary=summary,
-            start_time=novo_agendamento_db.horario_inicio.isoformat(),
-            end_time=novo_agendamento_db.horario_fim.isoformat(),
+            start_time=aware_start_time.isoformat(),
+            end_time=aware_end_time.isoformat(),
             description=description
         )
     except Exception as e:
-        print(f"ATENÇÃO: Agendamento {novo_agendamento_db.codagendamento} salvo no DB, mas falhou ao criar no Google Calendar. Erro: {e}")
+        print(f"ATENÇÃO: Agendamento {novo_agendamento_db.codagendamento} salvo no DB, mas falhou ao criar no Google Calendar da Clínica. Erro: {e}")
+
+    if paciente.token:
+        try:
+            print(f"Paciente {paciente.nome} tem um token. A tentar criar evento no seu calendário pessoal.")
+            
+            GoogleCalendarService.create_patient_calendar_event(
+                refresh_token=paciente.token, 
+                summary=f"Consulta com {profissional.nome}",
+                start_time=aware_start_time.isoformat(),
+                end_time=aware_end_time.isoformat(),
+                description=f"Agendamento na clínica. Tipo: {tipoConsulta.nome}"
+            )
+            print("Evento criado com sucesso no calendário do paciente.")
+        except Exception as e:
+            print(f"AVISO: Não foi possível criar o evento no calendário pessoal do paciente. Erro: {e}") 
 
     return novo_agendamento_db

@@ -30,6 +30,7 @@ class Paciente(Base):
     bairro = Column(String(100), nullable=True)
     cidade = Column(String(100), nullable=True)
     estado = Column(String(50), nullable=True)
+    token = Column(String(100), nullable=True)
     situacao = Column(
         SQLAlchemyEnum(TipoSituacaoPaciente, name="tipo_situacao_paciente"), 
         nullable=False, 

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional, Dict, Any
 
 class ChatQueryRequest(BaseModel):
     query: str
@@ -8,3 +8,5 @@ class ChatQueryRequest(BaseModel):
 class ChatQueryResponse(BaseModel):
     answer: str
     context: List[str] 
+    action_type: Optional[str] = None
+    action_data: Optional[Dict[str, Any]] = None 

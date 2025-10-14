@@ -33,6 +33,7 @@ class PacienteUpdate(BaseModel):
     cidade: str | None = None
     estado: str | None = None
     situacao: TipoSituacaoPaciente | None = None
+    token: str | None = None
 
 class PacienteRead(PacienteBase):
     codpaciente: int

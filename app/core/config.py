@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     PINECONE_INDEX_NAME: str = "clinica-index"
     GOOGLE_CALENDAR_ID: str 
     GOOGLE_SERVICE_ACCOUNT_FILE: str = "service-account.json"
+    GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
+    GOOGLE_REDIRECT_URI: str
 
     class Config:
         env_file = ".env"
