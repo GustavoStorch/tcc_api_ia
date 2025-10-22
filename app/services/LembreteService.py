@@ -19,7 +19,7 @@ class LembreteService:
                 a.risco IN ('Alto', 'Médio') AND
                 a.situacao = 'Agendado' AND
                 p.telegram_chat_id IS NOT NULL AND
-                (a.horario_inicio::date - CURRENT_DATE IN (1, 3));
+                (a.horario_inicio::date - CURRENT_DATE IN (1, 2, 3));
         """)
 
         result = db.execute(query).mappings().all()

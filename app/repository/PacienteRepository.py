@@ -10,5 +10,11 @@ class PacienteRepository:
         db.commit()
         db.refresh(paciente)
         return paciente
+    
+    def update_fuso_horario(self, db: Session, paciente: PacienteModel.Paciente, fuso_horario: str) -> PacienteModel.Paciente:
+        paciente.fuso_horario = fuso_horario
+        db.commit()
+        db.refresh(paciente)
+        return paciente
 
 paciente_repo = PacienteRepository()

@@ -34,6 +34,7 @@ class PacienteUpdate(BaseModel):
     estado: str | None = None
     situacao: TipoSituacaoPaciente | None = None
     token: str | None = None
+    fuso_horario: str | None = None
 
 class PacienteRead(PacienteBase):
     codpaciente: int

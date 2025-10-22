@@ -42,7 +42,7 @@ def create_calendar_event(summary: str, start_time: str, end_time: str, descript
         print(f"Ocorreu um erro ao criar o evento no Google Calendar: {e}")
         raise
 
-def create_patient_calendar_event(refresh_token: str, summary: str, start_time: str, end_time: str, description: Optional[str] = None):
+def create_patient_calendar_event(refresh_token: str, summary: str, start_time: str, end_time: str, timeZone: str, description: Optional[str] = None):
     try:
         creds = credentials.Credentials.from_authorized_user_info(
             info={
@@ -58,8 +58,8 @@ def create_patient_calendar_event(refresh_token: str, summary: str, start_time: 
         event_body = {
             'summary': summary,
             'description': description,
-            'start': {'dateTime': start_time, 'timeZone': 'America/Sao_Paulo'},
-            'end': {'dateTime': end_time, 'timeZone': 'America/Sao_Paulo'},
+            'start': {'dateTime': start_time, 'timeZone': timeZone},
+            'end': {'dateTime': end_time, 'timeZone': timeZone},
         }
 
         # Usa 'primary' para gravar ao calendário principal do utilizador autenticado

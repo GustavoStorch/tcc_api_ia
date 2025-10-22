@@ -18,7 +18,7 @@ def handle_chat_query(
 ):
     try:
         # Chama a função principal do serviço, passando a mensagem e a sessão do DB
-        result = ChatService.process_chat_query(request.query, request.session_id, db)
+        result = ChatService.process_chat_query(request.query, request.session_id, db, action_context=request.action_context)
         return result
     except Exception as e:
         raise HTTPException(

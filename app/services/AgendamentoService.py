@@ -30,25 +30,37 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
     if not valor_consulta:
         raise ValueError("Valor da COnsulta não encontrado.")
 
-    sao_paulo_tz = ZoneInfo('America/Sao_Paulo')
-    naive_start_time = agendamento_data.horario_inicio
-    aware_start_time = naive_start_time.replace(tzinfo=sao_paulo_tz)
-    aware_end_time = aware_start_time + timedelta(minutes=tipoConsulta.duracao_padrao_minutos)
+    # Realiza as conversões de horas conforme fuso horários dos pacients.
+    clinic_tz = ZoneInfo('America/Sao_Paulo')
+    patient_tz_str = paciente.fuso_horario if paciente.fuso_horario else 'America/Sao_Paulo'
+    patient_tz = ZoneInfo(patient_tz_str)
+
+    naive_patient_start_time = agendamento_data.horario_inicio
+    patient_aware_start_time = naive_patient_start_time.replace(tzinfo=patient_tz)
+    duration = timedelta(minutes=tipoConsulta.duracao_padrao_minutos)
+    patient_aware_end_time = patient_aware_start_time + duration
+
+    clinic_aware_start_time = patient_aware_start_time.astimezone(clinic_tz)
+    clinic_aware_end_time = patient_aware_end_time.astimezone(clinic_tz)
+
+    # naive_start_time = agendamento_data.horario_inicio
+    # aware_start_time = naive_start_time.replace(tzinfo=clinic_tz)
+    # aware_end_time = aware_start_time + timedelta(minutes=tipoConsulta.duracao_padrao_minutos)
     db_agendamento = AgendamentoModel.Agendamento(
         codpaciente=paciente.codpaciente,
         codprofissional=profissional.codprofissional,
         codtipoconsulta=tipoConsulta.codtipoconsulta,
         codclinica=agendamento_data.codclinica,
-        horario_inicio=aware_start_time,
-        horario_fim=aware_end_time,
+        horario_inicio=clinic_aware_start_time,
+        horario_fim=clinic_aware_end_time,
         valor_cobrado=valor_consulta.valor
     )
 
     feature_predicao = PredicaoDTO.PredictionFeatures(
-        antecedencia_dias=(aware_start_time.date() - datetime.now().date()).days,
-        dia_da_semana=aware_start_time.weekday(),
-        mes=aware_start_time.month,
-        hora_do_dia=aware_start_time.hour,
+        antecedencia_dias=(clinic_aware_start_time.date() - datetime.now().date()).days,
+        dia_da_semana=clinic_aware_start_time.weekday(),
+        mes=clinic_aware_start_time.month,
+        hora_do_dia=clinic_aware_start_time.hour,
         historico_no_shows=0, 
         historico_agendamentos=0,
         taxa_no_show=0.0
@@ -71,8 +83,8 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
 
         GoogleCalendarService.create_calendar_event(
             summary=summary,
-            start_time=aware_start_time.isoformat(),
-            end_time=aware_end_time.isoformat(),
+            start_time=clinic_aware_start_time.isoformat(),
+            end_time=clinic_aware_end_time.isoformat(),
             description=description
         )
     except Exception as e:
@@ -85,8 +97,9 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
             GoogleCalendarService.create_patient_calendar_event(
                 refresh_token=paciente.token, 
                 summary=f"Consulta com {profissional.nome}",
-                start_time=aware_start_time.isoformat(),
-                end_time=aware_end_time.isoformat(),
+                start_time=patient_aware_start_time.isoformat(),
+                end_time=patient_aware_end_time.isoformat(),
+                timeZone=paciente.fuso_horario,
                 description=f"Agendamento na clínica. Tipo: {tipoConsulta.nome}"
             )
             print("Evento criado com sucesso no calendário do paciente.")
