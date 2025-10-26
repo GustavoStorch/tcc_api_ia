@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from ..models.AgendamentoModel import Agendamento
+from ..models.AgendamentoModel import Agendamento, TipoSituacaoAgendamento
 from ..dto.AgendamentoDTO import AgendamentoCreate
 from datetime import datetime
 
@@ -22,14 +22,30 @@ class AgendamentoRepository:
         return db.query(Agendamento)\
             .filter(
                 Agendamento.codpaciente == codpaciente,
-                Agendamento.situacao == 'Agendado',
+                Agendamento.situacao.in_(['Agendado', 'Confirmado']),
                 Agendamento.horario_inicio > datetime.now()
             )\
             .order_by(Agendamento.horario_inicio.asc())\
             .first()
     
-    def update_status_agendamento(self, db: Session, agendamento: Agendamento, novo_status: str) -> Agendamento:
+    def get_by_id(self, db: Session, codAgendamento: int) -> Agendamento | None:
+        return db.query(Agendamento)\
+            .filter(
+                Agendamento.codagendamento == codAgendamento,
+                Agendamento.situacao.in_(['Agendado', 'Confirmado'])
+            )\
+            .order_by(Agendamento.horario_inicio.asc())\
+            .first()
+    
+    def update_status_agendamento(self, db: Session, agendamento: Agendamento, novo_status: TipoSituacaoAgendamento) -> Agendamento:
         agendamento.situacao = novo_status
+        db.commit()
+        db.refresh(agendamento)
+        return agendamento
+    
+    def create_calendar_event(self, db: Session, agendamento: Agendamento, codAgendaClinica: str, codAgendaPaciente: str) -> Agendamento:
+        agendamento.codagendaclinica = codAgendaClinica
+        agendamento.codagendapaciente = codAgendaPaciente
         db.commit()
         db.refresh(agendamento)
         return agendamento

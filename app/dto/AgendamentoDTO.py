@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 
 class AgendamentoCreate(BaseModel):
     nomepaciente: str
@@ -7,6 +8,8 @@ class AgendamentoCreate(BaseModel):
     nometipoconsulta: str
     codclinica: int
     horario_inicio: datetime 
+    codagendaclinica: Optional[str] = None
+    codagendapaciente: Optional[str] = None
 
 class AgendamentoRead(BaseModel):
     codagendamento: int

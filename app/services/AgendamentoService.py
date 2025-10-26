@@ -81,12 +81,13 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
         summary = f"Consulta: {profissional.nome}"
         description = f"Agendamento via API da Clínica. Tipo de Consulta: {agendamento_data.nometipoconsulta}"
 
-        GoogleCalendarService.create_calendar_event(
+        event_id_clinica = GoogleCalendarService.create_calendar_event(
             summary=summary,
             start_time=clinic_aware_start_time.isoformat(),
             end_time=clinic_aware_end_time.isoformat(),
             description=description
         )
+
     except Exception as e:
         print(f"ATENÇÃO: Agendamento {novo_agendamento_db.codagendamento} salvo no DB, mas falhou ao criar no Google Calendar da Clínica. Erro: {e}")
 
@@ -94,7 +95,7 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
         try:
             print(f"Paciente {paciente.nome} tem um token. A tentar criar evento no seu calendário pessoal.")
             
-            GoogleCalendarService.create_patient_calendar_event(
+            event_id_paciente = GoogleCalendarService.create_patient_calendar_event(
                 refresh_token=paciente.token, 
                 summary=f"Consulta com {profissional.nome}",
                 start_time=patient_aware_start_time.isoformat(),
@@ -105,5 +106,17 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
             print("Evento criado com sucesso no calendário do paciente.")
         except Exception as e:
             print(f"AVISO: Não foi possível criar o evento no calendário pessoal do paciente. Erro: {e}") 
+
+    try:
+        novo_agendamento_db = agendamento_repo.create_calendar_event(
+        db=db,  
+        agendamento=novo_agendamento_db,
+        codAgendaClinica = event_id_clinica,
+        codAgendaPaciente = event_id_paciente
+    )
+    except Exception as e:
+        print(f"Erro ao salvar IDs do Google Calendar no agendamento: {e}")
+        db.rollback()
+        
 
     return novo_agendamento_db

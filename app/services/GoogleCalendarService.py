@@ -3,6 +3,7 @@ from googleapiclient.discovery import build
 from ..core.config import settings
 from google.oauth2 import service_account, credentials
 from typing import List, Optional
+from googleapiclient.errors import HttpError
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 SCOPESPACIENTES = ['https://www.googleapis.com/auth/calendar.events']
@@ -63,11 +64,69 @@ def create_patient_calendar_event(refresh_token: str, summary: str, start_time: 
         }
 
         # Usa 'primary' para gravar ao calendário principal do utilizador autenticado
-        service.events().insert(
+        created_event = service.events().insert(
             calendarId='primary', 
             body=event_body
         ).execute()
 
         print("Evento inserido com sucesso no calendário pessoal do paciente.")
+
+        return created_event.get('id')
     except Exception as e:
         print(f"Ocorreu um erro ao criar o evento no calendário do paciente: {e}")
+
+def delete_calendar_event(event_id: str):
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            settings.GOOGLE_SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        
+        service = build('calendar', 'v3', credentials=creds)
+        
+        service.events().delete(
+            calendarId=settings.GOOGLE_CALENDAR_ID, 
+            eventId=event_id
+        ).execute()
+        
+        print(f"Evento da Clínica (ID: {event_id}) deletado com sucesso.")
+
+    except HttpError as e:
+        if e.resp.status == 404:
+            print(f"AVISO: Evento da Clínica (ID: {event_id}) não encontrado para deleção (já foi deletado?).")
+        else:
+            print(f"Ocorreu um erro ao deletar o evento da Clínica: {e}")
+            raise
+    except Exception as e:
+        print(f"Ocorreu um erro inesperado ao deletar evento da Clínica: {e}")
+        raise
+
+def delete_patient_calendar_event(refresh_token: str, event_id: str):
+    try:
+        creds = credentials.Credentials.from_authorized_user_info(
+            info={
+                "refresh_token": refresh_token,
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            },
+            scopes=SCOPESPACIENTES
+        )
+        
+        service = build('calendar', 'v3', credentials=creds)
+        
+        service.events().delete(
+            calendarId='primary', 
+            eventId=event_id
+        ).execute()
+        
+        print(f"Evento do Paciente (ID: {event_id}) deletado com sucesso.")
+
+    except HttpError as e:
+        if e.resp.status == 404:
+            print(f"AVISO: Evento do Paciente (ID: {event_id}) não encontrado para deleção (já foi deletado?).")
+        elif e.resp.status == 401 or e.resp.status == 400:
+             print(f"AVISO: Falha ao deletar evento do Paciente (ID: {event_id}). Token pode ter sido revogado.")
+        else:
+            print(f"Ocorreu um erro Http ao deletar o evento do Paciente: {e}")
+            raise
+    except Exception as e:
+        print(f"Ocorreu um erro inesperado ao deletar evento do Paciente: {e}")
+        raise

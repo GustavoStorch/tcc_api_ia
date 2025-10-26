@@ -3,6 +3,7 @@ from sqlalchemy import func
 import google.generativeai as genai
 from pinecone import Pinecone
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 import json
 
 from ..core.config import settings
@@ -14,6 +15,8 @@ from ..services.SincronizacaoVetorialService import embedder
 from ..models.PacienteModel import Paciente
 from ..dto.AgendamentoDTO import AgendamentoCreate
 from ..services.AgendamentoService import criar_novo_agendamento
+from . import GoogleCalendarService
+from ..core.RedisClient import redis_client
 
 # Inicializa o Pinecone e o Gemini
 try:
@@ -31,12 +34,14 @@ def _get_intent_and_entities(query: str) -> dict:
     today = date.today().strftime('%Y-%m-%d')
     prompt = f"""
     Analise a pergunta do utilizador e classifique a sua intenção.
-    As intenções possíveis são: 'saudacao', 'confirmar_agendamento', 'criar_agendamento', 'consulta_horarios', 'informacao_geral', 'resposta_localizacao'.
+    As intenções possíveis são: 'saudacao', 'confirmar_agendamento', 'criar_agendamento', 'consulta_horarios', 'cancelar_agendamento', 'modificar_agendamento', 'informacao_geral', 'resposta_localizacao'.
 
     - 'saudacao' é para cumprimentos gerais como "Oi", "Bom dia", "Tudo bem?".
     - 'confirmar_agendamento' é usado para respostas como "Sim", "Confirmo", "Ok, confirmado".
     - 'criar_agendamento' é usado quando o utilizador pede explicitamente para marcar uma consulta.
     - 'consulta_horarios' é para quando o utilizador pergunta sobre horários livres.
+    - 'cancelar_agendamento': O utilizador quer cancelar uma consulta. (Ex: "Quero cancelar meu agendamento", "Preciso desmarcar minha consulta")
+    - 'modificar_agendamento': O utilizador quer mudar a data/hora de uma consulta. (Ex: "Quero reagendar minha consulta", "Posso trocar o horário?")
     - 'informacao_geral' é para todas as outras perguntas.
     - 'resposta_localizacao': A resposta do utilizador a uma pergunta sobre a sua localização.
 
@@ -74,6 +79,14 @@ def _get_intent_and_entities(query: str) -> dict:
     Exemplo 7:
     Pergunta: "Sim, está correto minha localização."
     Resposta: {{"intent": "resposta_localizacao", "entities": {{"confirmacao": "sim", "localizacao_atual": "Curitiba, Paraná"}}}}
+
+    Exemplo 8:
+    Pergunta: "Gostaria de cancelar minha consulta de sexta."
+    Respuesta: {{"intent": "cancelar_agendamento", "entities": {{"data": "2025-10-10"}}}}
+
+    Exemplo 9:
+    Pergunta: "Preciso reagendar meu horário com a Dra. Ana"
+    Respuesta: {{"intent": "modificar_agendamento", "entities": {{"nome_profissional": "Dra. Ana"}}}}
 
     Pergunta do Utilizador: "{query}"
     """
@@ -261,31 +274,9 @@ def _inferir_fuso_horario_de_local(local: str) -> str | None:
         print(f"Erro ao inferir fuso horário: {e}")
         return None
     
+# Retorna a mensagem padrão da clinica.
 def _handle_greeting(query: str) -> dict:
     return {"answer": "Olá! Bem vindo à nossa clinica. Como posso ajudar?", "context": [], "action_type": None, "action_data": None}
-
-# def process_chat_query(query: str, telegram_id: int, db: Session) -> dict:
-#     if intent_model is None or pinecone_index is None:
-#         raise ConnectionError("Serviços de IA não inicializados.")
-    
-#     # Identifica a intenção
-#     intent_data = _get_intent_and_entities(query)
-#     intent = intent_data.get("intent")
-#     entities = intent_data.get("entities", {})
-
-#     # Tomada de ação com base na intenção
-#     if intent == "consulta_horarios":
-#         print("DEBUG: Intenção 'consulta_horarios' detetada.")
-#         return _handle_schedule_query(entities, db)
-#     elif intent == "criar_agendamento":
-#         print("DEBUG: Intenção 'criar_agendamento' detetada.")
-#         return _handle_create_appointment(entities, telegram_id, db)
-#     elif intent == "confirmar_agendamento":
-#         print("DEBUG: Intenção 'confirmar_agendamento' detetada.")
-#         return _handle_confirmation(telegram_id, db)
-#     else:
-#         print("DEBUG: Intenção 'informacao_geral' detetada.")
-#         return _handle_rag_query(query)
 
 # Atualiza fuso horário do cliente no banco de dados e chama o chat novamente.
 def _handle_localization_response(query: str, db: Session, paciente: Paciente, action_context: dict) -> dict:
@@ -312,8 +303,102 @@ def _handle_localization_response(query: str, db: Session, paciente: Paciente, a
             "action_data": action_context
         }
 
+# Realiza o cancelamento do agendamento
+def _perform_cancellation(db: Session, paciente: Paciente, agendamento: AgendamentoModel.Agendamento) -> bool:
+    try:
+        agendamento_repo.update_status_agendamento(db, agendamento=agendamento, novo_status=AgendamentoModel.TipoSituacaoAgendamento.Cancelado_Pelo_Paciente)
+        
+        try:
+            GoogleCalendarService.delete_calendar_event(event_id=agendamento.codagendaclinica)
+        except Exception as e:
+            print(f"AVISO: Não foi possível deletar evento do calendário da CLÍNICA. Erro: {e}")
+
+        # 3. Deleta o evento do calendário do Paciente (se ele deu permissão)
+        if paciente.token:
+            try:
+                GoogleCalendarService.delete_patient_calendar_event(event_id=agendamento.codagendapaciente, refresh_token=paciente.token)
+            except Exception as e:
+                print(f"AVISO: Não foi possível deletar evento do calendário do PACIENTE. Erro: {e}")
+
+        return True
+    except Exception as e:
+        print(f"ERRO ao executar cancelamento: {e}")
+        return False
+
+#Busca o agendamento a ser cancelado
+def _handle_cancel_request(telegram_id: int, db: Session) -> dict:
+    paciente = paciente_repo.get_by_telegram_id(db, telegram_id=telegram_id)
+    if not paciente:
+        return {"answer": "Não encontrei seu registro de paciente.", "context": []}
+
+    proximo_agendamento = agendamento_repo.get_proximo_agendamento_pendente(db, codpaciente=paciente.codpaciente) 
+    
+    if not proximo_agendamento:
+        return {"answer": "Você não possui agendamentos futuros para cancelar.", "context": [], "action_type": None, "action_data": None}
+
+    try:
+        patient_tz = ZoneInfo(paciente.fuso_horario if paciente.fuso_horario else 'America/Sao_Paulo')
+        horario_paciente = proximo_agendamento.horario_inicio.astimezone(patient_tz)
+        data_formatada = horario_paciente.strftime('%d/%m/%Y às %H:%M')
+    except Exception:
+        data_formatada = proximo_agendamento.horario_inicio.strftime('%d/%m/%Y às %H:%M (Horário da Clínica)')
+
+    return {
+        "answer": f"Encontrei um agendamento com {proximo_agendamento.profissional.nome} para o dia {data_formatada}. Você confirma o CANCELAMENTO deste horário? (Responda 'sim' ou 'não')",
+        "context": [],
+        "action_type": "REQUER_CONFIRMACAO_CANCELAMENTO",
+        "action_data": {
+            "type": "AGUARDANDO_CONFIRMACAO_CANCELAMENTO",
+            "codagendamento": proximo_agendamento.codagendamento
+        }
+    }
+
+#Busca o agendamento a ser modificado
+def _handle_reschedule_request(telegram_id: int, db: Session) -> dict:
+    paciente = paciente_repo.get_by_telegram_id(db, telegram_id=telegram_id)
+    if not paciente:
+        return {"answer": "Não encontrei seu registro de paciente.", "context": []}
+
+    proximo_agendamento = agendamento_repo.get_proximo_agendamento_pendente(db, codpaciente=paciente.codpaciente) 
+    
+    if not proximo_agendamento:
+        return {"answer": "Você não possui agendamentos futuros para reagendar.", "context": [], "action_type": None, "action_data": None}
+
+    try:
+        patient_tz = ZoneInfo(paciente.fuso_horario if paciente.fuso_horario else 'America/Sao_Paulo')
+        horario_paciente = proximo_agendamento.horario_inicio.astimezone(patient_tz)
+        data_formatada = horario_paciente.strftime('%d/%m/%Y às %H:%M')
+    except Exception:
+        data_formatada = proximo_agendamento.horario_inicio.strftime('%d/%m/%Y às %H:%M (Horário da Clínica)')
+
+    return {
+        "answer": f"Entendido. Para reagendar, primeiro precisamos cancelar sua consulta atual com {proximo_agendamento.profissional.nome} no dia {data_formatada}. Você confirma o cancelamento para prosseguir com o REAGENDAMENTO? (Responda 'sim' ou 'não')",
+        "context": [],
+        "action_type": "REQUER_CONFIRMACAO_REAGENDAMENTO",
+        "action_data": {
+            "type": "AGUARDANDO_CONFIRMACAO_REAGENDAMENTO",
+            "codagendamento": proximo_agendamento.codagendamento
+        }
+    }
 
 def process_chat_query(query: str, session_id: str, db: Session, action_context: dict | None = None) -> dict:
+    
+    # ETAPA 0: Carregar o contexto da "memória"
+    session_key = f"chat_session:{session_id}"
+    action_context = None
+    location_confirmed_this_run = False
+    
+    if redis_client:
+        try:
+            context_json = redis_client.get(session_key)
+            if context_json:
+                action_context = json.loads(context_json)
+                print(f"DEBUG: Contexto carregado para {session_id}: {action_context}")
+        except Exception as e:
+            print(f"Erro ao LER contexto do Redis: {e}")
+    else:
+        print("AVISO: Redis client não está disponível.")
+
     try:
         telegram_id = int(session_id)
     except (ValueError, TypeError):
@@ -323,6 +408,7 @@ def process_chat_query(query: str, session_id: str, db: Session, action_context:
     if not paciente:
         return {"answer": "Não consegui encontrar o seu registo de paciente.", "context": [], "action_type": None, "action_data": None}
 
+    # ETAPA 1: Gerir o estado da conversa, se possui algo na memória
     if action_context:
         context_type = action_context.get("type")
         original_intent_data = action_context.get("original_intent_data", {})
@@ -331,53 +417,135 @@ def process_chat_query(query: str, session_id: str, db: Session, action_context:
             fuso_inferido = _inferir_fuso_horario_de_local(query)
             if fuso_inferido:
                 paciente_repo.update_fuso_horario(db, paciente=paciente, fuso_horario=fuso_inferido)
-                # Fuso horário guardado! Agora, vamos processar a pergunta original novamente.
                 query = original_intent_data.get("query")
+                action_context = None 
+                location_confirmed_this_run = True
             else:
-                return {"answer": "Peço desculpa, não consegui identificar um fuso horário para essa localização. Pode tentar novamente?", "context": [], "action_type": "REQUER_LOCALIZACAO", "action_data": action_context}
+                response = {"answer": "Peço desculpa, não consegui identificar um fuso horário para essa localização. Pode tentar novamente?", "context": [], "action_type": "REQUER_LOCALIZACAO", "action_data": action_context}
+                if redis_client:
+                    redis_client.set(session_key, json.dumps(response.get("action_data")))
+                    redis_client.expire(session_key, 900) # 15 minutos
+                return response
 
         elif context_type == "AGUARDANDO_CONFIRMACAO_LOCALIZACAO":
             if "sim" in query.lower() or "correto" in query.lower():
                 query = original_intent_data.get("query")
+                action_context = None 
+                location_confirmed_this_run = True
             else:
-                return {
+                response = {
                     "answer": "Entendido. Por favor, diga-me a sua nova localização (cidade e estado/país).",
                     "context": [],
                     "action_type": "REQUER_LOCALIZACAO",
                     "action_data": {"type": "AGUARDANDO_LOCALIZACAO", "original_intent_data": original_intent_data}
                 }
-    
+                if redis_client:
+                    redis_client.set(session_key, json.dumps(response.get("action_data")))
+                    redis_client.expire(session_key, 900)
+                return response
+        
+        elif context_type == "AGUARDANDO_CONFIRMACAO_CANCELAMENTO":
+            cod_agendamento = action_context.get("codagendamento")
+            
+            if not cod_agendamento:
+                response = {"answer": "Ocorreu um erro, não sei qual agendamento cancelar.", "context": []}
+            elif "sim" in query.lower() or "confirmo" in query.lower():
+                agendamento = agendamento_repo.get_by_id(db, codAgendamento=cod_agendamento)
+                if not agendamento:
+                     response = {"answer": "Erro: Agendamento não encontrado para cancelar.", "context": []}
+                elif _perform_cancellation(db, paciente, agendamento):
+                    response = {"answer": "Agendamento cancelado com sucesso. Posso ajudar em algo mais?", "context": []}
+                else:
+                    response = {"answer": "Ocorreu um erro ao tentar cancelar. Por favor, tente novamente.", "context": []}
+            else:
+                response = {"answer": "Entendido. O seu agendamento NÃO foi cancelado. Posso ajudar em algo mais?", "context": []}
+            
+            # Conversa terminada, limpa a memória e retorna
+            if redis_client:
+                redis_client.delete(session_key)
+            return response
+
+        elif context_type == "AGUARDANDO_CONFIRMACAO_REAGENDAMENTO":
+            cod_agendamento = action_context.get("codagendamento")
+
+            if not cod_agendamento:
+                response = {"answer": "Ocorreu um erro, não sei qual agendamento reagendar.", "context": []}
+            elif "sim" in query.lower() or "confirmo" in query.lower():
+                agendamento = agendamento_repo.get_by_id(db, codAgendamento=cod_agendamento)
+                if agendamento:
+                    _perform_cancellation(db, paciente, agendamento)
+                    response = {"answer": "Agendamento anterior cancelado. Agora, por favor, me diga o novo dia, horário e profissional para o reagendamento.", "context": []}
+                else:
+                    response = {"answer": "Erro: Agendamento não encontrado para reagendar.", "context": []}
+            else:
+                 response = {"answer": "Entendido. O seu agendamento foi mantido. Posso ajudar em algo mais?", "context": []}
+            
+            # Conversa terminada, limpa a memória e retorna
+            if redis_client:
+                redis_client.delete(session_key)
+            return response
+            
+    # ETAPA 2: Processar a pergunta atual (Se não houver 'action_context')
     intent_data = _get_intent_and_entities(query)
     intent = intent_data.get("intent")
     entities = intent_data.get("entities", {})
 
-    if intent in ['criar_agendamento']:
+    # ETAPA 3: Verificar pré-requisitos para intenções de agendamento
+    if intent in ['criar_agendamento', 'consulta_horarios']: 
         if not paciente.fuso_horario:
             # Se não tem fuso, é solicitado sua localização.
-            return {
+            response = {
                 "answer": "Para garantir que o horário fique correto para si, por favor, pode me dizer em qual cidade e estado (ou país) você está?",
                 "context": [],
                 "action_type": "REQUER_LOCALIZACAO",
                 "action_data": {"type": "AGUARDANDO_LOCALIZACAO", "original_intent_data": {"query": query, "intent": intent, "entities": entities}}
             }
-        # else:
-        #     text = f"Para garantir que o horário fique correto para si, por favor, confirme a cidade e estado que (Cidade: {paciente.cidade}, Estado: {paciente.estado}) você está?"
-        #     return {
-        #         "answer": text,
-        #         "context": [],
-        #         "action_type": "CONFIRMAR_LOCALIZACAO",
-        #         "action_data": {"type": "AGUARDANDO_LOCALIZACAO", "original_intent_data": {"query": query, "intent": intent, "entities": entities}}
-        #     }
+            if redis_client:
+                redis_client.set(session_key, json.dumps(response.get("action_data")))
+                redis_client.expire(session_key, 900)
+            return response
+        elif not location_confirmed_this_run:
+            text = f"Para garantir que o horário fique correto para si, por favor, confirme a cidade e estado que (Cidade: {paciente.cidade}, Estado: {paciente.estado}) você está?"
+            response = {
+                "answer": text,
+                "context": [],
+                "action_type": "AGUARDANDO_CONFIRMACAO_LOCALIZACAO",
+                "action_data": {"type": "AGUARDANDO_CONFIRMACAO_LOCALIZACAO", "original_intent_data": {"query": query, "intent": intent, "entities": entities}}
+            }
+            if redis_client:
+                redis_client.set(session_key, json.dumps(response.get("action_data")))
+                redis_client.expire(session_key, 900)
+            return response
 
+    # ETAPA 4: Roteamento Final para a Ação
     if intent == "criar_agendamento":
-        return _handle_create_appointment(entities, telegram_id, db)
+        response = _handle_create_appointment(entities, telegram_id, db)
     elif intent == "consulta_horarios":
-        return _handle_schedule_query(entities, db)
+        response = _handle_schedule_query(entities, db)
     elif intent == "confirmar_agendamento":
-        return _handle_confirmation(telegram_id, db)
+        response = _handle_confirmation(telegram_id, db)
     elif intent == "saudacao":
-        return _handle_greeting(query)
+        response = _handle_greeting(query)
     elif intent == "resposta_localizacao":
-        return _handle_localization_response(query, db, paciente, entities)
+        response = _handle_localization_response(query, db, paciente, entities)
+    elif intent == "cancelar_agendamento":
+        response = _handle_cancel_request(telegram_id, db)
+    elif intent == "modificar_agendamento":
+        response = _handle_reschedule_request(telegram_id, db)
     else: # informacao_geral
-        return _handle_rag_query(query)
+        response = _handle_rag_query(query)
+
+    # ETAPA 5: Guardar o Novo Estado ou Limpar o Antigo
+    try:
+        if redis_client:
+            new_action_data = response.get("action_data")
+            if new_action_data:
+                redis_client.set(session_key, json.dumps(new_action_data))
+                redis_client.expire(session_key, 900)
+            else:
+                redis_client.delete(session_key)
+    except Exception as e:
+        print(f"Erro ao GRAVAR contexto no Redis: {e}")
+
+    return response
+
