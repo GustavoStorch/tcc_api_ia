@@ -20,3 +20,4 @@ sentence-transformers
 xgboost
 httpx
 redis
+scikit-learn

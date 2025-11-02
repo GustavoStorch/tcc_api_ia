@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
+    TELEGRAM_TOKEN: str
+    FERNET_KEY: str
 
     class Config:
         env_file = ".env"

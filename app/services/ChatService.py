@@ -2,9 +2,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 import google.generativeai as genai
 from pinecone import Pinecone
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time
 from zoneinfo import ZoneInfo
 import json
+import httpx
+import pytz
 
 from ..core.config import settings
 from ..models import AgendamentoModel, GradeHorariosModel
@@ -15,6 +17,7 @@ from ..services.SincronizacaoVetorialService import embedder
 from ..models.PacienteModel import Paciente
 from ..dto.AgendamentoDTO import AgendamentoCreate
 from ..services.AgendamentoService import criar_novo_agendamento
+from ..services.GoogleCalendarService import esta_ocupado_google_calendar
 from . import GoogleCalendarService
 from ..core.RedisClient import redis_client
 
@@ -98,8 +101,6 @@ def _get_intent_and_entities(query: str) -> dict:
     except (json.JSONDecodeError, AttributeError):
         return {"intent": "informacao_geral", "entities": {}}
 
-
-# Busca os horários disponíveis com base na análise do Gemini
 def _handle_schedule_query(entities: dict, db: Session) -> dict:
     nome_profissional = entities.get("nome_profissional")
     data_str = entities.get("data")
@@ -119,20 +120,53 @@ def _handle_schedule_query(entities: dict, db: Session) -> dict:
     dias_semana_map = {0: "Segunda", 1: "Terca", 2: "Quarta", 3: "Quinta", 4: "Sexta", 5: "Sabado", 6: "Domingo"}
     dia_semana_str = dias_semana_map.get(data.weekday())
     
-    grade_do_dia = db.query(GradeHorariosModel.GradeHorarios).filter(GradeHorariosModel.GradeHorarios.codprofissional == profissional.codprofissional, GradeHorariosModel.GradeHorarios.dia == dia_semana_str).first()
+    grade_do_dia = db.query(GradeHorariosModel.GradeHorarios).filter(
+        GradeHorariosModel.GradeHorarios.codprofissional == profissional.codprofissional, 
+        GradeHorariosModel.GradeHorarios.dia == dia_semana_str
+    ).first()
+    
     if not grade_do_dia:
-        return {"answer": f"O(A) {profissional.nome} não atende neste dia da semana.", "context": []}
+        return {"answer": f"O(A) {profissional.nome} não atende neste dia da semana ({dia_semana_str}).", "context": []}
 
-    agendamentos_ocupados = db.query(AgendamentoModel.Agendamento.horario_inicio).filter(AgendamentoModel.Agendamento.codprofissional == profissional.codprofissional, func.date(AgendamentoModel.Agendamento.horario_inicio) == data).all()
-    horarios_ocupados = {ag.horario_inicio.time() for ag in agendamentos_ocupados}
+    try:
+        fuso_horario = pytz.timezone('America/Sao_Paulo') 
+    except pytz.UnknownTimeZoneError:
+        fuso_horario = pytz.UTC
+
+    inicio_dia_local = fuso_horario.localize(datetime.combine(data, time.min))
+    fim_dia_local = fuso_horario.localize(datetime.combine(data, time.max))
+
+    agendamentos_ocupados = db.query(AgendamentoModel.Agendamento.horario_inicio).filter(
+        AgendamentoModel.Agendamento.codprofissional == profissional.codprofissional, 
+        AgendamentoModel.Agendamento.horario_inicio >= inicio_dia_local,
+        AgendamentoModel.Agendamento.horario_inicio <= fim_dia_local
+    ).all()
+    
+    horarios_ocupados = set()
+    for ag in agendamentos_ocupados:
+        hora_local = ag.horario_inicio.astimezone(fuso_horario)
+        horarios_ocupados.add(hora_local.time().replace(tzinfo=None))
     
     todos_os_slots = set()
-    duracao_consulta = timedelta(minutes=60)
-    turnos = [(grade_do_dia.horainciomanha, grade_do_dia.horafimmanha), (grade_do_dia.horainciotarde, grade_do_dia.horafimtarde)]
+    duracao_consulta = timedelta(minutes=60) 
+    
+    turnos = []
+    if grade_do_dia.horainciomanha and grade_do_dia.horafimmanha:
+        turnos.append((grade_do_dia.horainciomanha, grade_do_dia.horafimmanha))
+        
+    if grade_do_dia.horainciotarde and grade_do_dia.horafimtarde:
+        turnos.append((grade_do_dia.horainciotarde, grade_do_dia.horafimtarde))
+        
+    if grade_do_dia.horaincionoite and grade_do_dia.horafimnoite:
+        turnos.append((grade_do_dia.horaincionoite, grade_do_dia.horafimnoite))
+        
+    if not turnos:
+        return {"answer": f"O(A) {profissional.nome} não parece ter um horário de trabalho configurado para este dia.", "context": []}
     
     for inicio_turno, fim_turno in turnos:
         slot_atual = datetime.combine(data, inicio_turno)
         fim_turno_dt = datetime.combine(data, fim_turno)
+        
         while slot_atual + duracao_consulta <= fim_turno_dt:
             todos_os_slots.add(slot_atual.time())
             slot_atual += duracao_consulta
@@ -146,6 +180,7 @@ def _handle_schedule_query(entities: dict, db: Session) -> dict:
     data_formatada = data.strftime('%d/%m/%Y')
     resposta_formatada = f"Os horários disponíveis para {profissional.nome} no dia {data_formatada} são: {', '.join([t.strftime('%H:%M') for t in horarios_disponiveis])}."
     return {"answer": resposta_formatada, "context": []}
+
 
 
 # Processamento utilizando a pipeline RAG
@@ -170,7 +205,7 @@ def _handle_rag_query(query: str) -> dict:
     return {"answer": response.text, "context": context_list}
 
 # Valida token do usuário e solicita sua permissão caso não tiver ainda.
-def _handle_create_appointment(entities: dict, telegram_id: int, db: Session) -> dict:
+def _handle_create_appointment(entities: dict, telegram_id: int, db: Session, query: str, intent: str) -> dict:
     paciente = paciente_repo.get_by_telegram_id(db, telegram_id=telegram_id)
     if not paciente:
         return {"answer": "Não consegui encontrar o seu registo de paciente.", "context": []}
@@ -181,7 +216,7 @@ def _handle_create_appointment(entities: dict, telegram_id: int, db: Session) ->
             "answer": "Para adicionar o agendamento ao seu Google Calendar, preciso da sua permissão. Por favor, clique no link abaixo para autorizar.",
             "context": [],
             "action_type": "REQUER_AUTORIZACAO_GCAL",
-            "action_data": {"authorization_url": auth_link}
+            "action_data": {"type": "REQUER_AUTORIZACAO_GCAL", "original_intent_data": {"query": query, "intent": intent, "entities": entities}}
         }
 
     nome_profissional = entities.get("nome_profissional")
@@ -381,6 +416,95 @@ def _handle_reschedule_request(telegram_id: int, db: Session) -> dict:
         }
     }
 
+DIAS_SEMANA_PY_MAP = {0: "Segunda", 1: "Terca", 2: "Quarta", 3: "Quinta", 4: "Sexta", 5: "Sabado", 6: "Domingo"}
+
+def _get_paciente_horario_preferido(db: Session, codpaciente: int, fuso_horario_paciente: str) -> time | None:
+    try:
+        # Query para extrair hora e minuto do horário ajustado ao fuso
+        query = db.query(
+            func.extract('hour', AgendamentoModel.Agendamento.horario_inicio).label('hora'),
+            func.extract('minute', AgendamentoModel.Agendamento.horario_inicio).label('minuto'),
+            func.count().label('total')
+        ).filter(
+            AgendamentoModel.Agendamento.codpaciente == codpaciente,
+            AgendamentoModel.Agendamento.situacao.in_([
+                AgendamentoModel.TipoSituacaoAgendamento.Concluido,
+                AgendamentoModel.TipoSituacaoAgendamento.Confirmado,
+                AgendamentoModel.TipoSituacaoAgendamento.Agendado
+            ])
+        ).group_by('hora', 'minuto') \
+        .order_by(func.count().desc()) \
+        .limit(1)
+
+        resultado = query.first()
+        if resultado:
+            hora_obj = (datetime.combine(date.today(), time(int(resultado.hora), int(resultado.minuto))) 
+                 - timedelta(hours=3)).time()
+            print(f"DEBUG: Horário preferido encontrado para {codpaciente}: {hora_obj}")
+            return hora_obj
+
+    except Exception as e:
+        print(f"Erro ao buscar horário preferido: {e}")
+
+    return None
+
+
+def _encontrar_proxima_data_disponivel(db: Session, nome_profissional: str, horario_preferido: time) -> date | None:
+    hoje = date.today()
+    for i in range(1, 30):  # procura pelos próximos 30 dias
+        data_teste = hoje + timedelta(days=i)
+        if _verificar_disponibilidade(db, nome_profissional, data_teste, horario_preferido):
+            return data_teste
+    return None
+
+
+def _verificar_disponibilidade(db: Session, nome_profissional: str, data: date, hora: time) -> bool:
+    try:
+        profissional = profissional_repo.get_profissional_by_name(db, nome=nome_profissional)
+        if not profissional:
+            return False
+
+        dia_semana_str = DIAS_SEMANA_PY_MAP.get(data.weekday())
+        grade_do_dia = db.query(GradeHorariosModel.GradeHorarios).filter(
+            GradeHorariosModel.GradeHorarios.codprofissional == profissional.codprofissional,
+            GradeHorariosModel.GradeHorarios.dia == dia_semana_str
+        ).first()
+
+        if not grade_do_dia:
+            return False
+
+        fuso_horario_clinica = pytz.timezone('America/Sao_Paulo')
+        slot_dt_naive = datetime.combine(data, hora)
+        slot_dt_aware = fuso_horario_clinica.localize(slot_dt_naive)
+
+        # Verifica se dentro de algum turno
+        turnos = []
+        if grade_do_dia.horainciomanha and grade_do_dia.horafimmanha:
+            turnos.append((grade_do_dia.horainciomanha, grade_do_dia.horafimmanha))
+        if grade_do_dia.horainciotarde and grade_do_dia.horafimtarde:
+            turnos.append((grade_do_dia.horainciotarde, grade_do_dia.horafimtarde))
+        if grade_do_dia.horaincionoite and grade_do_dia.horafimnoite:
+            turnos.append((grade_do_dia.horaincionoite, grade_do_dia.horafimnoite))
+
+        horario_na_grade = any(inicio <= hora < fim for inicio, fim in turnos)
+        if not horario_na_grade:
+            return False
+
+        # Verifica se já existe agendamento
+        agendamento_ocupado = db.query(AgendamentoModel.Agendamento).filter(
+            AgendamentoModel.Agendamento.codprofissional == profissional.codprofissional,
+            AgendamentoModel.Agendamento.horario_inicio == slot_dt_aware
+        ).first()
+
+        if esta_ocupado_google_calendar(nome_profissional, data, hora):
+            return False
+
+        return agendamento_ocupado is None
+
+    except Exception as e:
+        print(f"Erro ao verificar disponibilidade: {e}")
+        return False
+    
 def process_chat_query(query: str, session_id: str, db: Session, action_context: dict | None = None) -> dict:
     
     # ETAPA 0: Carregar o contexto da "memória"
@@ -484,7 +608,35 @@ def process_chat_query(query: str, session_id: str, db: Session, action_context:
             if redis_client:
                 redis_client.delete(session_key)
             return response
+        elif context_type == "AGUARDANDO_CONFIRMACAO_SUGESTAO":
+            sugestao = action_context.get("sugestao", {})
             
+            if "sim" in query.lower() or "confirmo" in query.lower():
+                # Chamar _handle_create_appointment com as entidades da sugestão
+                print(f"DEBUG: Utilizador aceitou sugestão. Agendando com: {sugestao}")
+                if redis_client:
+                    redis_client.delete(session_key)
+                
+                original_query = original_intent_data.get("query", "")
+                
+                response = _handle_create_appointment(sugestao, telegram_id, db, query=original_query, intent="criar_agendamento")
+            
+            else:
+                response = {
+                    "answer": "Entendido. Por favor, me diga qual data e hora você gostaria de verificar.",
+                    "context": [],
+                    "action_type": None,
+                    "action_data": None 
+                }
+                if redis_client:
+                    redis_client.delete(session_key)
+                    
+            return response
+        elif context_type == "REQUER_AUTORIZACAO_GCAL":
+            query = original_intent_data.get("query")
+            action_context = None 
+            location_confirmed_this_run = True
+    
     # ETAPA 2: Processar a pergunta atual (Se não houver 'action_context')
     intent_data = _get_intent_and_entities(query)
     intent = intent_data.get("intent")
@@ -504,6 +656,40 @@ def process_chat_query(query: str, session_id: str, db: Session, action_context:
                 redis_client.set(session_key, json.dumps(response.get("action_data")))
                 redis_client.expire(session_key, 900)
             return response
+        if not entities.get("data") and entities.get("nome_profissional"):
+            hora_pref = _get_paciente_horario_preferido(db, paciente.codpaciente, paciente.fuso_horario)
+    
+            if hora_pref:
+                # Encontrar a próxima data disponível para o profissional no horário preferido
+                proxima_data = _encontrar_proxima_data_disponivel(db, entities.get("nome_profissional"), hora_pref)
+                
+                if proxima_data:
+                    proxima_data_str = proxima_data.strftime('%Y-%m-%d')
+                    proxima_data_fmt = proxima_data.strftime('%d/%m/%Y')
+                    hora_pref_str = hora_pref.strftime('%H:%M')
+                    
+                    # Criar resposta
+                    response = {
+                        "answer": f"Notei que costuma marcar consultas por volta das {hora_pref_str}.\n\nEncontrei um horário disponível na próxima data, dia {proxima_data_fmt} às {hora_pref_str}. Deseja agendar?",
+                        "context": [],
+                        "action_type": "REQUER_CONFIRMACAO_SUGESTAO",
+                        "action_data": {
+                            "type": "AGUARDANDO_CONFIRMACAO_SUGESTAO",
+                            "original_intent_data": {"query": query, "intent": intent, "entities": entities},
+                            "sugestao": {
+                                "nome_profissional": entities.get("nome_profissional"),
+                                "data": proxima_data_str,
+                                "hora": hora_pref_str,
+                                "tipo_consulta": entities.get("tipo_consulta", "Primeira Consulta")
+                            }
+                        }
+                    }
+                    
+                    if redis_client:
+                        redis_client.set(session_key, json.dumps(response.get("action_data")))
+                        redis_client.expire(session_key, 900)
+                    
+                    return response
         elif not location_confirmed_this_run:
             text = f"Para garantir que o horário fique correto para si, por favor, confirme a cidade e estado que (Cidade: {paciente.cidade}, Estado: {paciente.estado}) você está?"
             response = {
@@ -519,7 +705,7 @@ def process_chat_query(query: str, session_id: str, db: Session, action_context:
 
     # ETAPA 4: Roteamento Final para a Ação
     if intent == "criar_agendamento":
-        response = _handle_create_appointment(entities, telegram_id, db)
+        response = _handle_create_appointment(entities, telegram_id, db, query, intent)
     elif intent == "consulta_horarios":
         response = _handle_schedule_query(entities, db)
     elif intent == "confirmar_agendamento":
@@ -549,3 +735,24 @@ def process_chat_query(query: str, session_id: str, db: Session, action_context:
 
     return response
 
+async def send_message(telegram_id: int, text: str):
+    if not settings.TELEGRAM_TOKEN:
+        print("ERRO: TELEGRAM_TOKEN não está configurado.")
+        return
+    
+    telegram_url = f"https://api.telegram.org/bot{settings.TELEGRAM_TOKEN}/sendMessage"
+    
+    payload = {
+        "chat_id": telegram_id,
+        "text": text
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(telegram_url, json=payload)
+            if response.status_code != 200:
+                print(f"Erro ao enviar mensagem para {telegram_id}: {response.text}")
+            else:
+                print(f"Mensagem enviada com sucesso para {telegram_id}")
+    except Exception as e:
+        print(f"Exceção ao enviar mensagem para {telegram_id}: {e}")

@@ -4,6 +4,9 @@ from ..core.config import settings
 from google.oauth2 import service_account, credentials
 from typing import List, Optional
 from googleapiclient.errors import HttpError
+from cryptography.fernet import Fernet 
+from datetime import date, datetime, timedelta, time
+import pytz
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 SCOPESPACIENTES = ['https://www.googleapis.com/auth/calendar.events']
@@ -45,9 +48,17 @@ def create_calendar_event(summary: str, start_time: str, end_time: str, descript
 
 def create_patient_calendar_event(refresh_token: str, summary: str, start_time: str, end_time: str, timeZone: str, description: Optional[str] = None):
     try:
+        f = Fernet(settings.FERNET_KEY.encode('utf-8'))
+        if refresh_token.startswith('\\x'):
+            cleaned_hex_string = refresh_token[2:]
+        else:
+            cleaned_hex_string = refresh_token
+        base64_token_bytes = bytes.fromhex(cleaned_hex_string)
+        decrypted_token = f.decrypt(base64_token_bytes).decode('utf-8')
+
         creds = credentials.Credentials.from_authorized_user_info(
             info={
-                "refresh_token": refresh_token,
+                "refresh_token": decrypted_token,
                 "client_id": settings.GOOGLE_CLIENT_ID,
                 "client_secret": settings.GOOGLE_CLIENT_SECRET,
             },
@@ -130,3 +141,37 @@ def delete_patient_calendar_event(refresh_token: str, event_id: str):
     except Exception as e:
         print(f"Ocorreu um erro inesperado ao deletar evento do Paciente: {e}")
         raise
+
+def esta_ocupado_google_calendar(nome_profissional: str, data: date, hora: time) -> bool:
+    try:
+        slot_inicio = datetime.combine(data, hora)
+        slot_fim = slot_inicio + timedelta(minutes=60)  
+
+        fuso = pytz.timezone('America/Sao_Paulo')
+        slot_inicio_aware = fuso.localize(slot_inicio)
+        slot_fim_aware = fuso.localize(slot_fim)
+
+        timeMin = slot_inicio_aware.isoformat()
+        timeMax = slot_fim_aware.isoformat()
+
+        creds = service_account.Credentials.from_service_account_file(
+            settings.GOOGLE_SERVICE_ACCOUNT_FILE, scopes=SCOPES
+        )
+        service = build('calendar', 'v3', credentials=creds)
+
+        events_result = service.events().list(
+            calendarId=settings.GOOGLE_CALENDAR_ID, 
+            timeMin=timeMin,
+            timeMax=timeMax,
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+
+        events = events_result.get('items', [])
+        eventos_relevantes = [e for e in events if nome_profissional.lower() in e.get('summary', '').lower()]
+
+        return len(eventos_relevantes) > 0
+
+    except Exception as e:
+        print(f"Erro ao consultar Google Calendar: {e}")
+        return False  

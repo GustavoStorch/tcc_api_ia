@@ -3,10 +3,12 @@ from starlette.responses import RedirectResponse
 from sqlalchemy.orm import Session
 import httpx
 from typing import Optional
+from cryptography.fernet import Fernet 
 
 from ...core.config import settings
 from ...models.base import get_db
 from ...repository.PacienteRepository import PacienteRepository
+from ...services.ChatService import process_chat_query, send_message
 
 router = APIRouter()
 
@@ -53,8 +55,11 @@ async def google_callback(
     if response.status_code != 200:
         raise HTTPException(status_code=400, detail=f"Erro ao trocar o código: {response.text}")
 
+    f = Fernet(settings.FERNET_KEY.encode('utf-8'))
+
     token_data = response.json()
-    refresh_token = token_data.get("refresh_token")
+    # refresh_token = token_data.get("refresh_token")
+    refresh_token = f.encrypt(token_data.get("refresh_token").encode('utf-8'))
 
     if not refresh_token:
         return {"status": "info", "message": "Autorização já concedida anteriormente."}
@@ -71,9 +76,25 @@ async def google_callback(
         paciente_repo.update_refresh_token(db, paciente=paciente, token=refresh_token)
         print(f"Token de atualização para o paciente '{paciente.nome}' foi guardado com sucesso.")
 
+        response_dict = process_chat_query(
+            query="", 
+            session_id=telegram_id,
+            db=db
+        )
+
+        answer_to_user = response_dict.get("answer")
+
+        if answer_to_user:
+            # 4. Enviar a resposta de volta para o chat do utilizador
+            await send_message(telegram_id, answer_to_user)
+        else:
+            # Fallback caso algo corra mal no processamento
+            await send_message(telegram_id, "Autorização concluída! Pode voltar ao chat e tentar novamente.")
+            print(f"AVISO: process_chat_query não retornou um 'answer' para {telegram_id}.")
+
     except Exception as e:
         if isinstance(e, (ValueError, TypeError)):
             raise HTTPException(status_code=400, detail="Parâmetro 'state' inválido.")
-        raise HTTPException(status_code=500, detail="Ocorreu um erro interno ao processar a autorização.")
+        raise HTTPException(status_code=500, detail=f"Ocorreu um erro interno ao processar a autorização: {e}")
     
     return {"status": "sucesso", "message": "Autorização concedida! Pode fechar esta página."}
