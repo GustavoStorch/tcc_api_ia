@@ -17,5 +17,19 @@ class PacienteRepository:
         db.commit()
         db.refresh(paciente)
         return paciente
+    
+    def create_pacient(self, db: Session, telegram_id: int, nome: str | None) -> PacienteModel.Paciente:
+        novo_paciente = PacienteModel.Paciente(
+            telegram_chat_id=telegram_id,
+            nome=nome,
+            cpf=f"Tmp{telegram_id}",    
+            telefone="00000000",
+            situacao=PacienteModel.TipoSituacaoPaciente.Ativo
+        )
+        
+        db.add(novo_paciente)
+        db.commit()
+        db.refresh(novo_paciente)
+        return novo_paciente
 
 paciente_repo = PacienteRepository()

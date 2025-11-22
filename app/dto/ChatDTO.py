@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 class ChatQueryRequest(BaseModel):
     query: str
     session_id: str 
+    nome_paciente: str
     action_context: Optional[Dict[str, Any]] = None
 
 class ChatQueryResponse(BaseModel):

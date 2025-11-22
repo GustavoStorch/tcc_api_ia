@@ -79,6 +79,7 @@ async def google_callback(
         response_dict = process_chat_query(
             query="", 
             session_id=telegram_id,
+            nome_paciente=paciente.nome,
             db=db
         )
 

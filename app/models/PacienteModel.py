@@ -20,8 +20,8 @@ class Paciente(Base):
     __tablename__ = 'pacientes'
     codpaciente = Column(Integer, primary_key=True)
     nome = Column(String(150), nullable=False)
-    cpf = Column(String(14), nullable=False, unique=True)
-    telefone = Column(String(20), nullable=False)
+    cpf = Column(String(14), nullable=True, unique=True)
+    telefone = Column(String(20), nullable=True)
     email = Column(String(100), nullable=True, unique=True)
     telegram_chat_id = Column(BigInteger, nullable=True, unique=True)
     cep = Column(String(9), nullable=True)

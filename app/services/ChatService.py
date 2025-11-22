@@ -341,7 +341,7 @@ def _handle_localization_response(query: str, db: Session, paciente: Paciente, a
     fuso_inferido = _inferir_fuso_horario_de_local(query)
     if fuso_inferido:
         paciente_repo.update_fuso_horario(db, paciente=paciente, fuso_horario=fuso_inferido)
-        return process_chat_query(original_intent_data.get("query"), str(paciente.telegram_chat_id), db, action_context=None)
+        return process_chat_query(original_intent_data.get("query"), str(paciente.telegram_chat_id), paciente.nome, db, action_context=None)
     else:
         return {
             "answer": "Peço desculpa, não consegui identificar um fuso horário para essa localização. Pode tentar novamente com 'cidade, estado'?", 
@@ -518,7 +518,7 @@ def _verificar_disponibilidade(db: Session, nome_profissional: str, data: date, 
         print(f"Erro ao verificar disponibilidade: {e}")
         return False
     
-def process_chat_query(query: str, session_id: str, db: Session, action_context: dict | None = None) -> dict:
+def process_chat_query(query: str, session_id: str, nome_paciente: str, db: Session, action_context: dict | None = None) -> dict:
     
     # ETAPA 0: Carregar o contexto da "memória"
     session_key = f"chat_session:{session_id}"
