@@ -4,6 +4,7 @@ from sqlalchemy import (
     Integer, 
     String, 
     DateTime, 
+    Boolean,
     BigInteger,
     Enum as SQLAlchemyEnum
 )
@@ -32,6 +33,7 @@ class Paciente(Base):
     estado = Column(String(50), nullable=True)
     token = Column(String(1000), nullable=True)
     fuso_horario = Column(String(50), nullable=True)
+    alteracao_pendente = Column(Boolean, nullable=True)
     situacao = Column(
         SQLAlchemyEnum(TipoSituacaoPaciente, name="tipo_situacao_paciente"), 
         nullable=False, 

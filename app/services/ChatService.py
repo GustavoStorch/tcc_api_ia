@@ -211,7 +211,7 @@ def _handle_create_appointment(entities: dict, telegram_id: int, db: Session, qu
         return {"answer": "Não consegui encontrar o seu registo de paciente.", "context": []}
 
     if not paciente.token:
-        auth_link = f"http://127.0.0.1:8000/auth/google/login?telegram_id={telegram_id}"
+        auth_link = f"http://127.0.0.1:8000/auth/google/login?telegramid={telegram_id}"
         return {
             "answer": "Para adicionar o agendamento ao seu Google Calendar, preciso da sua permissão. Por favor, clique no link abaixo para autorizar.",
             "context": [],
@@ -228,17 +228,29 @@ def _handle_create_appointment(entities: dict, telegram_id: int, db: Session, qu
         return {"answer": "Faltam informações para o agendamento (profissional, data ou hora).", "context": []}
 
     try:
+        fuso_horario_clinica = pytz.timezone('America/Sao_Paulo')
+        horario_inicio_dt = datetime.fromisoformat(f"{data_str}T{hora_str}:00")
+        horario_inicio_aware = fuso_horario_clinica.localize(horario_inicio_dt)
+        
         agendamento_para_criar = AgendamentoCreate(
             nomepaciente=paciente.nome,
             nomeprofissional=nome_profissional,
             nometipoconsulta=tipo_consulta,
             codclinica=1,
-            horario_inicio=datetime.fromisoformat(f"{data_str}T{hora_str}:00")
+            horario_inicio=horario_inicio_aware
         )
 
         novo_agendamento = criar_novo_agendamento(db=db, agendamento_data=agendamento_para_criar)
 
-        data_formatada = novo_agendamento.horario_inicio.strftime('%d/%m/%Y às %H:%M')
+        try:
+            fuso_paciente = pytz.timezone(paciente.fuso_horario) if paciente.fuso_horario else fuso_horario_clinica
+        except:
+            fuso_paciente = fuso_horario_clinica
+
+        horario_inicio_paciente = novo_agendamento.horario_inicio.astimezone(fuso_paciente)
+        data_formatada = horario_inicio_paciente.strftime('%d/%m/%Y às %H:%M')
+
+        # data_formatada = novo_agendamento.horario_inicio.strftime('%d/%m/%Y às %H:%M')
         return {
             "answer": f"Pronto! O seu agendamento com {novo_agendamento.profissional.nome} foi confirmado para o dia {data_formatada}.",
             "context": [],
@@ -493,7 +505,8 @@ def _verificar_disponibilidade(db: Session, nome_profissional: str, data: date, 
         # Verifica se já existe agendamento
         agendamento_ocupado = db.query(AgendamentoModel.Agendamento).filter(
             AgendamentoModel.Agendamento.codprofissional == profissional.codprofissional,
-            AgendamentoModel.Agendamento.horario_inicio == slot_dt_aware
+            AgendamentoModel.Agendamento.horario_inicio == slot_dt_aware,
+            AgendamentoModel.Agendamento.situacao.in_(['Agendado', 'Confirmado', 'Concluido'])
         ).first()
 
         if esta_ocupado_google_calendar(nome_profissional, data, hora):
@@ -541,6 +554,9 @@ def process_chat_query(query: str, session_id: str, db: Session, action_context:
             fuso_inferido = _inferir_fuso_horario_de_local(query)
             if fuso_inferido:
                 paciente_repo.update_fuso_horario(db, paciente=paciente, fuso_horario=fuso_inferido)
+
+                _registrar_confirmacao_hoje(telegram_id)
+
                 query = original_intent_data.get("query")
                 action_context = None 
                 location_confirmed_this_run = True
@@ -553,6 +569,8 @@ def process_chat_query(query: str, session_id: str, db: Session, action_context:
 
         elif context_type == "AGUARDANDO_CONFIRMACAO_LOCALIZACAO":
             if "sim" in query.lower() or "correto" in query.lower():
+                _registrar_confirmacao_hoje(telegram_id)
+
                 query = original_intent_data.get("query")
                 action_context = None 
                 location_confirmed_this_run = True
@@ -656,17 +674,37 @@ def process_chat_query(query: str, session_id: str, db: Session, action_context:
                 redis_client.set(session_key, json.dumps(response.get("action_data")))
                 redis_client.expire(session_key, 900)
             return response
-        if not entities.get("data") and entities.get("nome_profissional"):
+
+        ja_confirmou_hoje = _verificar_se_confirmou_hoje(telegram_id)
+
+        if entities.get("nome_profissional"):
             hora_pref = _get_paciente_horario_preferido(db, paciente.codpaciente, paciente.fuso_horario)
     
             if hora_pref:
+                if not location_confirmed_this_run and not ja_confirmou_hoje:
+                    text = f"Para garantir que o horário sugerido fique correto, confirme se você ainda está em (Cidade: {paciente.cidade}, Estado: {paciente.estado})?"
+                    response = {
+                        "answer": text,
+                        "context": [],
+                        "action_type": "AGUARDANDO_CONFIRMACAO_LOCALIZACAO",
+                        "action_data": {"type": "AGUARDANDO_CONFIRMACAO_LOCALIZACAO", "original_intent_data": {"query": query, "intent": intent, "entities": entities}}
+                    }
+                    if redis_client:
+                        redis_client.set(session_key, json.dumps(response.get("action_data")))
+                        redis_client.expire(session_key, 900)
+                    return response
                 # Encontrar a próxima data disponível para o profissional no horário preferido
                 proxima_data = _encontrar_proxima_data_disponivel(db, entities.get("nome_profissional"), hora_pref)
                 
                 if proxima_data:
                     proxima_data_str = proxima_data.strftime('%Y-%m-%d')
                     proxima_data_fmt = proxima_data.strftime('%d/%m/%Y')
-                    hora_pref_str = hora_pref.strftime('%H:%M')
+
+                    hora_pref_dt = datetime.combine(proxima_data, hora_pref)
+                    hora_pref_dt = hora_pref_dt.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+                    hora_pref_local = hora_pref_dt.astimezone(ZoneInfo(paciente.fuso_horario))
+
+                    hora_pref_str = hora_pref_local.strftime('%H:%M')
                     
                     # Criar resposta
                     response = {
@@ -690,7 +728,7 @@ def process_chat_query(query: str, session_id: str, db: Session, action_context:
                         redis_client.expire(session_key, 900)
                     
                     return response
-        elif not location_confirmed_this_run:
+        elif not location_confirmed_this_run and not ja_confirmou_hoje:
             text = f"Para garantir que o horário fique correto para si, por favor, confirme a cidade e estado que (Cidade: {paciente.cidade}, Estado: {paciente.estado}) você está?"
             response = {
                 "answer": text,
@@ -756,3 +794,14 @@ async def send_message(telegram_id: int, text: str):
                 print(f"Mensagem enviada com sucesso para {telegram_id}")
     except Exception as e:
         print(f"Exceção ao enviar mensagem para {telegram_id}: {e}")
+
+def _verificar_se_confirmou_hoje(telegram_id: int) -> bool:
+    if not redis_client:
+        return False
+    key = f"loc_confirmed_24h:{telegram_id}"
+    return redis_client.exists(key)
+
+def _registrar_confirmacao_hoje(telegram_id: int):
+    if redis_client:
+        key = f"loc_confirmed_24h:{telegram_id}"
+        redis_client.set(key, "1", ex=86400)

@@ -112,9 +112,17 @@ def delete_calendar_event(event_id: str):
 
 def delete_patient_calendar_event(refresh_token: str, event_id: str):
     try:
+        f = Fernet(settings.FERNET_KEY.encode('utf-8'))
+        if refresh_token.startswith('\\x'):
+            cleaned_hex_string = refresh_token[2:]
+        else:
+            cleaned_hex_string = refresh_token
+        base64_token_bytes = bytes.fromhex(cleaned_hex_string)
+        decrypted_token = f.decrypt(base64_token_bytes).decode('utf-8')
+
         creds = credentials.Credentials.from_authorized_user_info(
             info={
-                "refresh_token": refresh_token,
+                "refresh_token": decrypted_token,
                 "client_id": settings.GOOGLE_CLIENT_ID,
                 "client_secret": settings.GOOGLE_CLIENT_SECRET,
             },

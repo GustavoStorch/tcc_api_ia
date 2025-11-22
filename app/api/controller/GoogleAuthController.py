@@ -14,7 +14,7 @@ router = APIRouter()
 
 @router.get("/google/login")
 def google_login(
-    telegram_id: int = Query(...) 
+    telegramid: int = Query(...) 
 ):
     auth_url = (
         f"https://accounts.google.com/o/oauth2/v2/auth?"
@@ -24,7 +24,7 @@ def google_login(
         f"scope=https://www.googleapis.com/auth/calendar.events&"
         f"access_type=offline&"
         f"prompt=consent&"
-        f"state={telegram_id}"
+        f"state={telegramid}"
     )
     return RedirectResponse(auth_url)
 
@@ -85,10 +85,8 @@ async def google_callback(
         answer_to_user = response_dict.get("answer")
 
         if answer_to_user:
-            # 4. Enviar a resposta de volta para o chat do utilizador
             await send_message(telegram_id, answer_to_user)
         else:
-            # Fallback caso algo corra mal no processamento
             await send_message(telegram_id, "Autorização concluída! Pode voltar ao chat e tentar novamente.")
             print(f"AVISO: process_chat_query não retornou um 'answer' para {telegram_id}.")
 
