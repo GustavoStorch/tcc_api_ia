@@ -31,7 +31,7 @@ except Exception as e:
     print(f"Erro ao inicializar serviços de IA: {e}")
     pinecone_index = None
     intent_model = None
-
+#- 'consulta_horarios' é para quando o utilizador pergunta sobre horários livres. 
 # Identifica a intenção da mensagem usando o gemini
 def _get_intent_and_entities(query: str) -> dict:
     today = date.today().strftime('%Y-%m-%d')
@@ -42,7 +42,7 @@ def _get_intent_and_entities(query: str) -> dict:
     - 'saudacao' é para cumprimentos gerais como "Oi", "Bom dia", "Tudo bem?".
     - 'confirmar_agendamento' é usado para respostas como "Sim", "Confirmo", "Ok, confirmado".
     - 'criar_agendamento' é usado quando o utilizador pede explicitamente para marcar uma consulta.
-    - 'consulta_horarios' é para quando o utilizador pergunta sobre horários livres.
+    - 'consulta_horarios' Use esta intenção se o usuário perguntar horários OU se ele tentar marcar mas der uma data vaga (ex: "semana que vem", "mês que vem").
     - 'cancelar_agendamento': O utilizador quer cancelar uma consulta. (Ex: "Quero cancelar meu agendamento", "Preciso desmarcar minha consulta")
     - 'modificar_agendamento': O utilizador quer mudar a data/hora de uma consulta. (Ex: "Quero reagendar minha consulta", "Posso trocar o horário?")
     - 'informacao_geral' é para todas as outras perguntas.
@@ -91,6 +91,10 @@ def _get_intent_and_entities(query: str) -> dict:
     Pergunta: "Preciso reagendar meu horário com a Dra. Ana"
     Respuesta: {{"intent": "modificar_agendamento", "entities": {{"nome_profissional": "Dra. Ana"}}}}
 
+    Exemplo 10:
+    Pergunta: "Marcar para semana que vem às 16h com Dr. Ricardo."
+    Resposta: {{"intent": "consulta_horarios", "entities": {{"nome_profissional": "Dr. Ricardo", "data_inicio": "2025-10-20", "data_fim": "2025-10-24", "hora": "16:00"}}}}
+
     Pergunta do Utilizador: "{query}"
     """
     response = intent_model.generate_content(prompt)
@@ -103,14 +107,62 @@ def _get_intent_and_entities(query: str) -> dict:
 
 def _handle_schedule_query(entities: dict, db: Session) -> dict:
     nome_profissional = entities.get("nome_profissional")
+    data_inicio_str = entities.get("data_inicio")
+    data_fim_str = entities.get("data_fim")
+    hora_str = entities.get("hora")
     data_str = entities.get("data")
 
-    if not nome_profissional or not data_str:
-        return {"answer": "Para consultar os horários, preciso saber o nome do profissional e a data. Pode me informar, por favor?", "context": []}
-
+    if not nome_profissional:
+        return {"answer": "Para consultar os horários, preciso saber o nome do profissional. Pode me informar?", "context": []}
+    
     profissional = profissional_repo.get_profissional_by_name(db, nome=nome_profissional)
     if not profissional:
         return {"answer": f"Não encontrei um profissional com o nome {nome_profissional}. Pode verificar o nome?", "context": []}
+
+    if data_inicio_str and data_fim_str and hora_str:
+        try:
+            dt_ini = date.fromisoformat(data_inicio_str)
+            dt_fim = date.fromisoformat(data_fim_str)
+            
+            # Ajusta formato da hora se necessário (garante HH:MM)
+            if len(hora_str) == 5: 
+                hora_alvo = time.fromisoformat(hora_str)
+            elif len(hora_str) == 2: # Caso venha só "16"
+                hora_alvo = time(int(hora_str), 0)
+            else:
+                hora_alvo = time.fromisoformat(hora_str) # Tenta padrão
+
+        except ValueError:
+             return {"answer": "Não entendi o formato da data ou hora. Pode repetir?", "context": []}
+
+        sugestoes = []
+        delta_dias = (dt_fim - dt_ini).days
+        
+        # Itera do dia inicial até o final
+        for i in range(delta_dias + 1):
+            dia_teste = dt_ini + timedelta(days=i)
+            
+            # Reutiliza sua função existente de verificação
+            if _verificar_disponibilidade(db, nome_profissional, dia_teste, hora_alvo):
+                # Formata para ficar bonito: "25/11 (Segunda)"
+                dia_fmt = dia_teste.strftime('%d/%m')
+                nome_dia = DIAS_SEMANA_PY_MAP.get(dia_teste.weekday(), "")
+                sugestoes.append(f"{dia_fmt} ({nome_dia})")
+
+        if sugestoes:
+            lista_dias = ", ".join(sugestoes)
+            return {
+                "answer": f"Para a semana solicitada, o(a) {profissional.nome} tem disponibilidade às {hora_str} nos seguintes dias: {lista_dias}. \n\nDeseja agendar em algum destes?", 
+                "context": []
+            }
+        else:
+            return {
+                "answer": f"Verifiquei a agenda do(a) {profissional.nome} entre {dt_ini.strftime('%d/%m')} e {dt_fim.strftime('%d/%m')}, mas infelizmente não há horários livres às {hora_str}.", 
+                "context": []
+            }
+        
+    if not data_str:
+         return {"answer": "Preciso saber a data para consultar os horários.", "context": []}
 
     try:
         data = date.fromisoformat(data_str)
@@ -640,16 +692,22 @@ def process_chat_query(query: str, session_id: str, nome_paciente: str, db: Sess
                 response = _handle_create_appointment(sugestao, telegram_id, db, query=original_query, intent="criar_agendamento")
             
             else:
-                response = {
-                    "answer": "Entendido. Por favor, me diga qual data e hora você gostaria de verificar.",
-                    "context": [],
-                    "action_type": None,
-                    "action_data": None 
-                }
+            #     response = {
+            #         "answer": "Entendido. Por favor, me diga qual data e hora você gostaria de verificar.",
+            #         "context": [],
+            #         "action_type": None,
+            #         "action_data": None 
+            #     }
+            #     if redis_client:
+            #         redis_client.delete(session_key)
+                    
+            # return response
+            # CORREÇÃO 1: Se não for "sim", NÃO retorne a resposta fixa.
+                # Limpa o contexto atual e deixa o código fluir para processar a nova frase do usuário.
+                print("DEBUG: Usuário rejeitou sugestão, processando nova entrada...")
+                action_context = None # Reseta contexto em memória
                 if redis_client:
                     redis_client.delete(session_key)
-                    
-            return response
         elif context_type == "REQUER_AUTORIZACAO_GCAL":
             query = original_intent_data.get("query")
             action_context = None 
@@ -677,7 +735,7 @@ def process_chat_query(query: str, session_id: str, nome_paciente: str, db: Sess
 
         ja_confirmou_hoje = _verificar_se_confirmou_hoje(telegram_id)
 
-        if entities.get("nome_profissional"):
+        if entities.get("nome_profissional") and not entities.get("hora"):
             hora_pref = _get_paciente_horario_preferido(db, paciente.codpaciente, paciente.fuso_horario)
     
             if hora_pref:
