@@ -1,4 +1,4 @@
-# Assistente Virtual Inteligente
+# ARQUITETURA DE UM ASSISTENTE VIRTUAL INTELIGENTE: APLICAÇÃO DE IA COMPORTAMENTAL NO AGENDAMENTO E NA AUTOMAÇÃO ADMINISTRATIVA PARA PROFISSIONAIS AUTÔNOMOS NA ÁREA DE SAÚDE E BEM-ESTAR.
 
 ## Índice
 * [Objetivo](#objetivo)
@@ -132,6 +132,11 @@ A solução segue uma arquitetura em camadas utilizando o padrão MVC (Model-Vie
 * Python 3.x para IA e API.
 * Docker para rodar N8N e banco.
 * PostgreSQL.
+
+**Configuração do N8N:**
+Para utilizar o orquestrador de fluxos, é necessário realizar uma das etapas abaixo:
+* **Opção Local (Self-hosted):** Clonar o projeto e executá-lo localmente via Docker ou npm. ([Repositório GitHub](https://github.com/n8n-io/n8n))
+* **Opção Cloud:** Criar uma conta diretamente no site oficial da plataforma. ([n8n.io](https://n8n.io/))
 
 ## Stacks
 * Python e JavaScript/TypeScript.
