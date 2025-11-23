@@ -52,21 +52,22 @@ O projeto segue a abordagem API-First, onde a lógica da aplicação e integraç
    * Um agente em Python analisa o histórico e sugere horários intelige
 
 3. **Interface**
+
    As telas administrativas foram desenhadas no Figma e já estão finalizadas para posterior desenvolvimento em React.
    * Todas as telas do painel administrativo foram desenhadas e validadas no Figma, focando na usabilidade para o profissional de saúde.
 
-4. **Desenvolvimento**
+5. **Desenvolvimento**
    * Backend em Python 3.12
    * Banco relacional PostgreSQL
    * Pinecone para armazenamento de vetores e memória contextual
 
-5. **Segurança**
+6. **Segurança**
    * Autenticação com JWT
    * Comunicação criptografada em HTTPS
    * Senhas com hash e salt
    * Estrutura compatível com LGPD
 
-6. **Versionamento e Deploy**
+7. **Versionamento e Deploy**
    * GitHub para controle de versão
    * Preparado para deploy na AWS
 
@@ -133,10 +134,23 @@ A solução segue uma arquitetura em camadas utilizando o padrão MVC (Model-Vie
 * Docker para rodar N8N e banco.
 * PostgreSQL.
 
-**Configuração do N8N:**
-Para utilizar o orquestrador de fluxos, é necessário realizar uma das etapas abaixo:
+1. **Execução da API**
+Para iniciar o servidor de desenvolvimento localmente, execute o seguinte comando na raiz do projeto:
+```bash
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+2. **Configuração do N8N:**
+Para configurar os fluxos de automação, siga as opções abaixo:
 * **Opção Local (Self-hosted):** Clonar o projeto e executá-lo localmente via Docker ou npm. ([Repositório GitHub](https://github.com/n8n-io/n8n))
+```bash
+npm install
+npx n8n@latest start --tunnel
+```
 * **Opção Cloud:** Criar uma conta diretamente no site oficial da plataforma. ([n8n.io](https://n8n.io/))
+
+Após acessar o painel do n8n, idependente da opção, é necessário importar o gluxo de trabalho (workflow), baixe o arquivo ([TCC N8N](https://github.com/GustavoStorch/tcc_api_ia/blob/main/docs/TCC%20copy.json)) disponivel no repositório.
 
 ## Stacks
 * Python e JavaScript/TypeScript.
