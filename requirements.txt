@@ -21,3 +21,5 @@ xgboost
 httpx
 redis
 scikit-learn
+pytest
+pytest-asyncio

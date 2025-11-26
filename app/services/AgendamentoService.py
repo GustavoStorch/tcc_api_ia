@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 
 from ..repository.AgendamentoRepository import agendamento_repo
-from ..models import AgendamentoModel, ProfissionalModel, TipoConsultaModel, ValorConsultaModal, PacienteModel
+from ..models import AgendamentoModel, ProfissionalModel, TipoConsultaModel, PacienteModel, ValorConsultaModel
 from ..dto import AgendamentoDTO, PredicaoDTO
 from . import GoogleCalendarService
 from zoneinfo import ZoneInfo
@@ -22,9 +22,9 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
     if not tipoConsulta:
         raise ValueError("Tipo de Consulta não encontrado.")
     
-    valor_consulta = db.query(ValorConsultaModal.ValorConsulta)\
-    .filter(ValorConsultaModal.ValorConsulta.codprofissional == profissional.codprofissional)\
-    .filter(ValorConsultaModal.ValorConsulta.codtipoconsulta == tipoConsulta.codtipoconsulta)\
+    valor_consulta = db.query(ValorConsultaModel.ValorConsulta)\
+    .filter(ValorConsultaModel.ValorConsulta.codprofissional == profissional.codprofissional)\
+    .filter(ValorConsultaModel.ValorConsulta.codtipoconsulta == tipoConsulta.codtipoconsulta)\
     .first()
 
     if not valor_consulta:
@@ -56,15 +56,27 @@ def criar_novo_agendamento(db: Session, agendamento_data: AgendamentoDTO.Agendam
         valor_cobrado=valor_consulta.valor
     )
 
+    stats_paciente = agendamento_repo.get_historico_paciente(db, paciente.codpaciente)
+
     feature_predicao = PredicaoDTO.PredictionFeatures(
         antecedencia_dias=(clinic_aware_start_time.date() - datetime.now().date()).days,
         dia_da_semana=clinic_aware_start_time.weekday(),
         mes=clinic_aware_start_time.month,
         hora_do_dia=clinic_aware_start_time.hour,
-        historico_no_shows=0, 
-        historico_agendamentos=0,
-        taxa_no_show=0.0
+        historico_no_shows=stats_paciente["historico_no_shows"], 
+        historico_agendamentos=stats_paciente["historico_agendamentos"],
+        taxa_no_show=stats_paciente["taxa_no_show"]
     )
+
+    # feature_predicao = PredicaoDTO.PredictionFeatures(
+    #     antecedencia_dias=(clinic_aware_start_time.date() - datetime.now().date()).days,
+    #     dia_da_semana=clinic_aware_start_time.weekday(),
+    #     mes=clinic_aware_start_time.month,
+    #     hora_do_dia=clinic_aware_start_time.hour,
+    #     historico_no_shows=0, 
+    #     historico_agendamentos=0,
+    #     taxa_no_show=0.0
+    # )
 
     resultado_predicao = prediction_service.predict(feature_predicao)
 
