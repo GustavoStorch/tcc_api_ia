@@ -16,19 +16,19 @@
 ---
 
 ## Objetivo
-Este projeto tem como objetivo criar uma solução tecnológica para ajudar profissionais autônomos da área da saúde, começando por psicólogos, a organizar melhor sua rotina. Muitos desses profissionais perdem tempo com tarefas administrativas, e o sistema foi criado para automatizar essas tarefas, permitindo que eles dediquem mais tempo aos atendimentos.
+O objetivo do projeto é desenvolver uma solução tecnológica para auxiliar profissionais autônomos da área da saúde, com maior enfoque em psicólogos, a organizar melhor sua rotina. Muitos profissionais perdem tempo com tarefas administrativas, e o sistema foi desenvolvido para automatizar algumas dessas tarefas, permitindo que eles dediquem mais tempo a seus atendimentos.
 
-A solução será um Assistente Virtual Inteligente que funciona pelo Telegram e também por um sistema web. A proposta é que ele seja simples de usar e faça parte do dia a dia do profissional sem complicações.
+A solução se trata de um Assistente Virtual Inteligente que funciona pelo Telegram e também por um sistema web. A proposta é que ele seja simples de usar efaça parte do dia a dia do profissional sem trazer a eles maiores complicações.
 
 ### Problemas que o sistema resolve
-A ferramenta foi criada para eliminar problemas comuns na rotina dos profissionais:
-* Agenda manual que causa erros e horários duplicados
-* Comunicação lenta e repetitiva com pacientes para marcar e remarcar consultas
+O sistema foi desenvolvido para eliminar problemas comuns na rotina dos profissionais:
+* Agenda manual que pode ocasionar erros e horários duplicados
+* Comunicação lenta com pacientes para marcar e remarcar consultas
 * Falta de lembretes automáticos, o que aumenta atrasos e faltas
 * Dificuldades com fusos horários em atendimentos online
 
 ### Diferencial: IA Comportamental
-Este assistente usa inteligência artificial para aprender o comportamento de cada paciente e personalizar as respostas.
+Este assistente usa inteligência artificial (IA) para aprender o comportamento de cada paciente e personalizar seu atendimento.
 * Sugere horários com base no histórico do paciente
 * Envia lembretes mais insistentes para pacientes que frequentemente remarcam ou faltam
 
@@ -76,9 +76,9 @@ O projeto segue a abordagem API-First, onde a lógica da aplicação e integraç
    * Estrutura pronta para gerar métricas sobre taxas de confirmação e volume de atendimentos.
 
 ## Contexto
-A demanda por atendimentos online aumentou e muitos profissionais ainda dependem de processos manuais. Isso gera erros de comunicação, falta de organização e problemas com fusos horários.
+A demanda por atendimentos online teve um grande aumento e muitos profissionais ainda dependem de processos manuais. Isso gera erros, desencontro de informações, falta de organização e problemas com fusos horários.
 
-Este projeto resolve esses problemas oferecendo agendamentos automáticos, lembretes inteligentes e sincronização correta de horários.
+Este projeto visa resolver esses problemas oferecendo agendamentos automáticos, lembretes inteligentes e sincronização correta de horários.
 
 ## Restrições do MVP
 Para a primeira versão (MVP) do projeto, foram definidas as seguintes delimitações:
