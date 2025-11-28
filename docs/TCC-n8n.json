@@ -12,7 +12,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.8,
       "position": [
-        1248,
+        976,
         0
       ],
       "id": "a26f35c7-0ac8-4f91-b760-b05769edb90a",
@@ -26,8 +26,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        768,
-        192
+        976,
+        208
       ],
       "id": "a1217d2d-89e1-476b-a68a-d1ca7420a7ff",
       "name": "Google Gemini Chat Model",
@@ -71,7 +71,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1616,
+        1392,
         0
       ],
       "id": "729dca89-13c0-42ff-a769-506b8b1cd42b",
@@ -83,53 +83,6 @@
           "name": "Telegram account"
         }
       }
-    },
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "minutes",
-              "minutesInterval": 10
-            }
-          ]
-        }
-      },
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        0,
-        208
-      ],
-      "id": "b99802a7-d766-4e64-85b8-3918c2a5e359",
-      "name": "Schedule Trigger"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "http://127.0.0.1:8000/chat/query",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $json[\"access_token\"] }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"query\": \"{{ $('Telegram Trigger').item.json.message.text }}\",\n  \"session_id\": \"{{ $('Telegram Trigger').item.json.message.chat.id }}\",\n  \"nome_paciente\": \"{{ $('Telegram Trigger').item.json.message.from.first_name }}{{ $('Telegram Trigger').item.json.message.from.last_name }}\"\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        752,
-        -32
-      ],
-      "id": "7c1b5a43-827e-4491-9fa9-ed4768d3701c",
-      "name": "HTTP Request3"
     },
     {
       "parameters": {
@@ -215,25 +168,6 @@
     },
     {
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "triggerAtHour": 9
-            }
-          ]
-        }
-      },
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        -16,
-        448
-      ],
-      "id": "4629c375-3f1e-492b-9f4a-7bd4d2fda870",
-      "name": "Schedule Trigger1"
-    },
-    {
-      "parameters": {
         "method": "POST",
         "url": "http://127.0.0.1:8000/auth/login",
         "sendBody": true,
@@ -263,6 +197,45 @@
     },
     {
       "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        208
+      ],
+      "id": "b99802a7-d766-4e64-85b8-3918c2a5e359",
+      "name": "Importação RAG"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -16,
+        448
+      ],
+      "id": "4629c375-3f1e-492b-9f4a-7bd4d2fda870",
+      "name": "Envio de Lembretes"
+    },
+    {
+      "parameters": {
         "url": "http://127.0.0.1:8000/agendamentos/lembretes-pendentes",
         "sendHeaders": true,
         "headerParameters": {
@@ -282,7 +255,7 @@
         448
       ],
       "id": "c704bb0a-a635-424d-a746-097a50b2bd62",
-      "name": "HTTP Request - Importação BD Vetorial1"
+      "name": "HTTP Request - Envio Lembrete"
     },
     {
       "parameters": {
@@ -297,7 +270,7 @@
         448
       ],
       "id": "12b751df-84be-408f-b1b5-ca20f238eb98",
-      "name": "Telegram1",
+      "name": "Telegram - Envio Lembrete",
       "webhookId": "f315265f-afde-4b68-811c-cf1162e9c70d",
       "credentials": {
         "telegramApi": {
@@ -305,6 +278,33 @@
           "name": "Telegram account"
         }
       }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/chat/query",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json[\"access_token\"] }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query\": \"{{ $('Telegram Trigger').item.json.message.text }}\",\n  \"session_id\": \"{{ $('Telegram Trigger').item.json.message.chat.id }}\",\n  \"nome_paciente\": \"{{ $('Telegram Trigger').item.json.message.from.first_name }}{{ $('Telegram Trigger').item.json.message.from.last_name }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        656,
+        0
+      ],
+      "id": "7c1b5a43-827e-4491-9fa9-ed4768d3701c",
+      "name": "HTTP Request - API Chat"
     }
   ],
   "pinData": {},
@@ -342,33 +342,11 @@
         ]
       ]
     },
-    "Schedule Trigger": {
-      "main": [
-        [
-          {
-            "node": "HTTP Request - Autenticação Importação",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "HTTP Request3": {
-      "main": [
-        [
-          {
-            "node": "AI Agent",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "HTTP Request - Autenticação": {
       "main": [
         [
           {
-            "node": "HTTP Request3",
+            "node": "HTTP Request - API Chat",
             "type": "main",
             "index": 0
           }
@@ -391,7 +369,29 @@
         []
       ]
     },
-    "Schedule Trigger1": {
+    "HTTP Request - Autenticação Lembrete": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Envio Lembrete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Importação RAG": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Autenticação Importação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envio de Lembretes": {
       "main": [
         [
           {
@@ -402,22 +402,22 @@
         ]
       ]
     },
-    "HTTP Request - Autenticação Lembrete": {
+    "HTTP Request - Envio Lembrete": {
       "main": [
         [
           {
-            "node": "HTTP Request - Importação BD Vetorial1",
+            "node": "Telegram - Envio Lembrete",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "HTTP Request - Importação BD Vetorial1": {
+    "HTTP Request - API Chat": {
       "main": [
         [
           {
-            "node": "Telegram1",
+            "node": "AI Agent",
             "type": "main",
             "index": 0
           }
@@ -429,7 +429,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "968cd142-a29c-4ec4-b7be-6e27f04cc495",
+  "versionId": "b286efbb-4295-4cd2-a53b-b730f5394363",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "8e0593195c941ea5a7ef3cd9878cf6b8eb58bf9c07e5f9c536397cc08ec260b8"
