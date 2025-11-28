@@ -31,7 +31,7 @@ except Exception as e:
     print(f"Erro ao inicializar serviços de IA: {e}")
     pinecone_index = None
     intent_model = None
-#- 'consulta_horarios' é para quando o utilizador pergunta sobre horários livres. 
+    
 # Identifica a intenção da mensagem usando o gemini
 def _get_intent_and_entities(query: str) -> dict:
     today = date.today().strftime('%Y-%m-%d')

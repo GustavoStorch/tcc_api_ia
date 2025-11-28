@@ -1,5 +1,5 @@
 {
-  "name": "TCC copy",
+  "name": "TCC-n8n",
   "nodes": [
     {
       "parameters": {
@@ -37,21 +37,6 @@
           "name": "Google Gemini(PaLM) Api account"
         }
       }
-    },
-    {
-      "parameters": {
-        "sessionIdType": "customKey",
-        "sessionKey": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
-        "contextWindowLength": 511000
-      },
-      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
-      "typeVersion": 1.3,
-      "position": [
-        992,
-        240
-      ],
-      "id": "ce45a470-bfc7-4ed3-b440-27551605381c",
-      "name": "Simple Memory"
     },
     {
       "parameters": {
@@ -230,78 +215,6 @@
     },
     {
       "parameters": {
-        "fieldsToAggregate": {
-          "fieldToAggregate": [
-            {
-              "fieldToAggregate": "message"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.aggregate",
-      "typeVersion": 1,
-      "position": [
-        800,
-        -288
-      ],
-      "id": "4fc0fff9-9ad7-498a-a043-787a6c3e3a3a",
-      "name": "Aggregate",
-      "retryOnFail": false
-    },
-    {
-      "parameters": {
-        "toolDescription": "Use esta ferramenta para criar, marcar ou agendar um novo compromisso ou consulta. Esta ferramenta deve ser chamada sempre que o usuário pedir para agendar algo.",
-        "method": "POST",
-        "url": "http://127.0.0.1:8000/agendamentos",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $('HTTP Request - Autenticação').item.json.access_token }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "multipart-form-data",
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "nomepaciente",
-              "value": "={{ $json.action_data.nomepaciente }}"
-            },
-            {
-              "name": "nomeprofissional",
-              "value": "={{ $json.action_data.nomeprofissional }}"
-            },
-            {
-              "name": "nometipoconsulta",
-              "value": "={{ $json.action_data.nometipoconsulta }}"
-            },
-            {
-              "name": "codclinica",
-              "value": "={{ $json.action_data.codclinica }}"
-            },
-            {
-              "name": "horario_inicio",
-              "value": "={{ $json.action_data.horario_inicio }}"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.2,
-      "position": [
-        1456,
-        240
-      ],
-      "id": "f33dbb49-8c1d-49d2-9930-8f44654a72ca",
-      "name": "gravar_agendamento"
-    },
-    {
-      "parameters": {
         "rule": {
           "interval": [
             {
@@ -392,34 +305,6 @@
           "name": "Telegram account"
         }
       }
-    },
-    {
-      "parameters": {
-        "toolDescription": "Use essa ferramenta para realizar o tratamento da mensagem e gerar o retorno ao usuário",
-        "method": "POST",
-        "url": "http://127.0.0.1:8000/chat/query",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $('HTTP Request - Autenticação').item.json.access_token }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"query\": \"{{ $('Telegram Trigger').item.json.message.text }}\",\n  \"session_id\": \"{{ $('Telegram Trigger').item.json.message.chat.id }}\"\n}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequestTool",
-      "typeVersion": 4.2,
-      "position": [
-        1264,
-        224
-      ],
-      "id": "8b945b6e-6145-4cf5-a813-dbb09cb0bf81",
-      "name": "chat"
     }
   ],
   "pinData": {},
@@ -433,11 +318,6 @@
             "index": 0
           }
         ]
-      ]
-    },
-    "Simple Memory": {
-      "ai_memory": [
-        []
       ]
     },
     "Telegram Trigger": {
@@ -511,16 +391,6 @@
         []
       ]
     },
-    "Aggregate": {
-      "main": [
-        []
-      ]
-    },
-    "gravar_agendamento": {
-      "ai_tool": [
-        []
-      ]
-    },
     "Schedule Trigger1": {
       "main": [
         [
@@ -553,18 +423,13 @@
           }
         ]
       ]
-    },
-    "chat": {
-      "ai_tool": [
-        []
-      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "208e5ea8-60d1-4db3-8040-dd8c5dd2068b",
+  "versionId": "968cd142-a29c-4ec4-b7be-6e27f04cc495",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "8e0593195c941ea5a7ef3cd9878cf6b8eb58bf9c07e5f9c536397cc08ec260b8"
