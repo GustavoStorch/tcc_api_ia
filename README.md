@@ -9,6 +9,7 @@
 * [C4 Model](#c4-model)
 * [Requisitos e Casos de Uso](#requisitos-e-casos-de-uso)
 * [Modelagem](#modelagem)
+* [Fluxo de Automação (N8N)](#fluxo-de-automação-n8n)
 * [Instalação e Infraestrutura](#instalação-e-infraestrutura)
 * [Stacks](#stacks)
 * [Monitoramento](Docs/Monitoramento.md)
