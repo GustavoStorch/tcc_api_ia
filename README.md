@@ -125,6 +125,16 @@ A solução segue uma arquitetura em camadas utilizando o padrão MVC (Model-Vie
 * **Frontend:** Frontend em React.
 * **Fluxo de Dados:** Interpretação de intenção via Gemini e validação de dados via API.
 
+## Fluxo de Automação (N8N)
+Para orquestrar as tarefas, como o processamento de mensagens do Telegram, a sincronização com o banco de dados vetorial Pinecone e o envio de lembretes aos pacientes, foi utilizado o n8n. A imagem abaixo demonstra o fluxo implementado:
+
+![Fluxo n8n](docs/image_n8n.png)
+
+O Fluxo possuí três gatilhos principais:
+1.  **Telegram Trigger**: Inicia o fluxo de chat com o agente de IA sempre que uma nova mensagem é recebida.
+2.  **Importação RAG**: Um gatilho agendado (`ScheduleTrigger`) que executa a importação para o banco de dados vetorial periodicamente.
+3.  **Envio de Lembretes**: Outro gatilho agendado que verifica e envia lembretes de agendamentos pendentes.
+
 ## Instalação e Infraestrutura
 > *Nota: Instruções para ambiente de desenvolvimento.*
 
