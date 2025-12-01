@@ -328,9 +328,17 @@ def _handle_confirmation(telegram_id: int, db: Session) -> dict:
         return {"answer": "Obrigado pela resposta! No momento, não encontrei agendamentos pendentes para confirmar.", "context": [], "action_type": None, "action_data": None}
     
     agendamento_repo.update_status_agendamento(db, agendamento=proximo_agendamento, novo_status="Confirmado")
-    
-    data_formatada = proximo_agendamento.horario_inicio.strftime('%d/%m/%Y às %H:%M')
-    return {"answer": f"Obrigado por confirmar! O seu agendamento para o dia {data_formatada} está confirmado.", "context": [], "action_type": None, "action_data": None}
+    # data_formatada = proximo_agendamento.horario_inicio.strftime('%d/%m/%Y às %H:%M')
+    # return {"answer": f"Obrigado por confirmar! O seu agendamento para o dia {data_formatada} está confirmado.", "context": [], "action_type": None, "action_data": None}
+
+    try:
+        patient_tz = ZoneInfo(paciente.fuso_horario if paciente.fuso_horario else 'America/Sao_Paulo')
+        horario_paciente = proximo_agendamento.horario_inicio.astimezone(patient_tz)
+        data_formatada = horario_paciente.strftime('%d/%m/%Y às %H:%M')
+    except Exception:
+        data_formatada = proximo_agendamento.horario_inicio.strftime('%d/%m/%Y às %H:%M')
+
+    return {"answer": f"Obrigado por confirmar! O seu agendamento para o dia **{data_formatada}** está confirmado.", "context": [], "action_type": None, "action_data": None}
 
 # Busca o fuso horário conforme a localização passada pelo paciente.
 def _inferir_fuso_horario_de_local(local: str) -> str | None:
@@ -684,13 +692,24 @@ def process_chat_query(query: str, session_id: str, nome_paciente: str, db: Sess
             if "sim" in query.lower() or "confirmo" in query.lower():
                 # Chamar _handle_create_appointment com as entidades da sugestão
                 print(f"DEBUG: Utilizador aceitou sugestão. Agendando com: {sugestao}")
-                if redis_client:
-                    redis_client.delete(session_key)
+                
                 
                 original_query = original_intent_data.get("query", "")
                 
                 response = _handle_create_appointment(sugestao, telegram_id, db, query=original_query, intent="criar_agendamento")
-            
+                
+                if redis_client:
+                    if response.get("action_type") == "REQUER_AUTORIZACAO_GCAL":
+                        if response.get("action_data"):
+                            redis_client.set(session_key, json.dumps(response["action_data"]))
+                            redis_client.expire(session_key, 900)
+                    else:
+                        redis_client.delete(session_key)
+
+                # if redis_client:
+                #     redis_client.delete(session_key)
+
+                return response
             else:
             #     response = {
             #         "answer": "Entendido. Por favor, me diga qual data e hora você gostaria de verificar.",
