@@ -12,7 +12,6 @@
 * [Fluxo de Automação (N8N)](#fluxo-de-automação-n8n)
 * [Instalação e Infraestrutura](#instalação-e-infraestrutura)
 * [Stacks](#stacks)
-* [Monitoramento](Docs/Monitoramento.md)
 * [Aplicação Rodando](#aplicação-rodando)
 
 ---
