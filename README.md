@@ -13,6 +13,7 @@
 * [Instalação e Infraestrutura](#instalação-e-infraestrutura)
 * [Stacks](#stacks)
 * [Monitoramento](Docs/Monitoramento.md)
+* [Aplicação Rodando](#aplicação-rodando)
 
 ---
 
@@ -169,3 +170,10 @@ Após acessar o painel do n8n, idependente da opção, é necessário importar o
 * PostgreSQL e Pinecone.
 * Google Gemini e N8N.
 * VS Code, Figma, GitHub e Postman.
+
+## Aplicação Rodando
+
+Como não foi possível deixar o assistente virtual disponível online devido à falta de créditos na AWS, estou disponibilizando o vídeo abaixo como demonstração do funcionamento do assistente em suas principais tarefas:
+
+**[Clique aqui para ver a demonstração do Assistente Virtual](https://youtu.be/WPJWmOYrGkU)**
+
