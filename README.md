@@ -13,8 +13,10 @@
 * [Modelagem](#modelagem)
 * [Fluxo de Automação (N8N)](#fluxo-de-automação-n8n)
 * [Instalação e Infraestrutura](#instalação-e-infraestrutura)
+* [Qualidade e Cobertura de Código](#qualidade-e-cobertura-de-código)
 * [Stacks](#stacks)
 * [Aplicação Rodando](#aplicação-rodando)
+* [Conclusão](#conclusão)
 
 ---
 
@@ -36,7 +38,7 @@ Este assistente usa inteligência artificial (IA) para aprender o comportamento 
 * Envia lembretes mais insistentes para pacientes que frequentemente remarcam ou faltam
 
 ### Atendimentos com fuso horário diferente
-Quando o paciente está em outro país, o sistema converte automaticamente o horário marcado para o horário do profissional.
+Quando o paciente está em outro fuso horário, o sistema converte automaticamente o horário marcado para o horário do profissional.
 Exemplo: o paciente marca às 14h no horário dele e o sistema agenda no horário correspondente no Brasil sem que ninguém precise fazer cálculos.
 
 ## Escopo e Entregas do MVP
@@ -63,6 +65,7 @@ O projeto segue a abordagem API-First, onde a lógica da aplicação e integraç
    * Backend em Python 3.12
    * Banco relacional PostgreSQL
    * Pinecone para armazenamento de vetores e memória contextual
+   * Cobertura de testes automatizados (Unitários/Integração)
 
 6. **Segurança**
    * Autenticação com JWT
@@ -112,7 +115,7 @@ A arquitetura do sistema foi documentada utilizando o modelo C4 para garantir cl
 ## Arquitetura
 [Diagrama de Arquitetura](docs/Arquitetura.png)
 
-Este diagrama ilustra a arquitetura geral do sistema, construída utilizando uma arquitetura de microsserviços. Incluindo a API, banco de dados PostgreSQL, e Redis para caching. O fluxo de dados começa com a requisição do usuário, que é processada pela API, que então interage com os outros serviços conforme necessário. Cada serviço é responsável por uma parte específica da funcionalidade, como gerenciamento de agendamentos, treinamento de modelos, e predição de resultados.
+Este diagrama ilustra a arquitetura geral do sistema, projetada de forma modular para garantir escalabilidade e facilidade de manutenção. A solução integra uma API central, banco de dados PostgreSQL para persistência transacional e Redis atuando como camada de caching. O uso do Redis é fundamental para armazenar contextos temporários de conversa e reduzir a latência, evitando consultas repetitivas ao banco de dados principal. O fluxo de dados inicia-se com a requisição do usuário, sendo processada pela API que orquestra a interação entre os módulos de agendamento e os serviços de inteligência artificial.
 
 [Diagrama de Arquitetura RAG](docs/Arquitetura_RAG.png)
 
@@ -198,16 +201,37 @@ npx n8n@latest start --tunnel
 
 Após acessar o painel do n8n, idependente da opção, é necessário importar o gluxo de trabalho (workflow), baixe o arquivo ([TCC N8N](https://github.com/GustavoStorch/tcc_api_ia/blob/main/docs/TCC-n8n.json)) disponivel no repositório.
 
+3. **Testes e Relatórios de Qualidade**
+Para garantir a confiabilidade da aplicação, o projeto conta com testes automatizados e análise de cobertura de código. Execute o comando abaixo para rodar a suíte de testes e gerar os relatórios em HTML:
+
+```bash
+python -m pytest --html=relatorio_testes.html --self-contained-html --cov=app --cov-report=html tests/
+```
+
+## Qualidade e Cobertura de Código
+
+O projeto segue boas práticas de qualidade e conta com uma suíte de testes automatizados para garantir o correto funcionamento das regras de negócio e evitar regressões.
+Abaixo está um exemplo do relatório de cobertura gerado pelo pytest-cov, mostrando o nível de confiabilidade.
+
+[Teste Pytest-cov](docs/testes.png)
+
 ## Stacks
 * Python e JavaScript/TypeScript.
 * React no frontend.
-* PostgreSQL e Pinecone.
+* PostgreSQL, Pinecone e Redis (Caché).
 * Google Gemini e N8N.
 * VS Code, Figma, GitHub e Postman.
+* Pytest, Pytest-cov (Cobertura) e Pytest-html (Relatórios).
 
 ## Aplicação Rodando
 
 Como não foi possível deixar o assistente virtual disponível online devido à falta de créditos na AWS, estou disponibilizando o vídeo abaixo como demonstração do funcionamento do assistente em suas principais tarefas:
 
 **[Clique aqui para ver a demonstração do Assistente Virtual](https://youtu.be/WPJWmOYrGkU)**
+
+## Conclusão
+
+Este projeto representa uma solução completa para a gestão de atendimento e controle de agenda, oferecendo uma abordagem inovadora para clínicas. Ele vai além de um simples sistema de agendamentos ao incorporar inteligência artificial para lidar com problemas reais do dia a dia, como o agendamento, cancelamentos e a organização da agenda dos pacientes. Como resultado, mesmo em fase de teste, foi observado uma melhora significativa no processo de agendamento e organização de agenda de profissionais da área da psicologia, bem como maior praticidade para os pacientes que utilizaram a ferramenta.
+
+
 
