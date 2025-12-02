@@ -7,6 +7,8 @@
 * [Restrições](#restrições-do-mvp)
 * [Trade-offs](#trade-offs)
 * [C4 Model](#c4-model)
+* [Arquitetura](#arquitetura)
+* [Inteligência Artificial e RAG](#inteligência-artificial-e-rag)
 * [Requisitos e Casos de Uso](#requisitos-e-casos-de-uso)
 * [Modelagem](#modelagem)
 * [Fluxo de Automação (N8N)](#fluxo-de-automação-n8n)
@@ -106,6 +108,24 @@ A arquitetura do sistema foi documentada utilizando o modelo C4 para garantir cl
     * *Aplicação Web:* Frontend para configuração.
     * *Banco de dados:* PostgreSQL.
 3. **Componentes:** Controllers de agendamento, usuários e consultas. IA com módulos de agendamento e análise comportamental.
+
+## Arquitetura
+[Diagrama de Arquitetura](docs/Arquitetura.png)
+
+Este diagrama ilustra a arquitetura geral do sistema, construída utilizando uma arquitetura de microsserviços. Incluindo a API, banco de dados PostgreSQL, e Redis para caching. O fluxo de dados começa com a requisição do usuário, que é processada pela API, que então interage com os outros serviços conforme necessário. Cada serviço é responsável por uma parte específica da funcionalidade, como gerenciamento de agendamentos, treinamento de modelos, e predição de resultados.
+
+[Diagrama de Arquitetura RAG](docs/Arquitetura_RAG.png)
+
+Este diagrama detalha a arquitetura com RAG (Retrieval-Augmented Generation). O principal componentes do RAG incluí um banco de dados vetorial para armazenar os embeddings dos documentos, e um modelo de linguagem para gerar as respostas. O fluxo de RAG começa com a consulta do usuário, que é então utilizada para buscar documentos relevantes no banco de dados vetorial. Os documentos recuperados são então combinados com a consulta original e enviados para o modelo de linguagem, que gera a resposta final.
+
+## Inteligência Artificial e RAG
+Para garantir que o chatbot forneça informações corretas sobre a clínica, foi implementada uma arquitetura RAG (Retrieval-Augmented Generation).
+
+**Indexação:** Um serviço agendado lê os dados do PostgreSQL (profissionais, tipos de consulta, valores), e converte eles em vetores usando o sentence-transformers/all-mpnet-base-v2 e armazenando no Pinecone.
+
+**Recuperação:** Quando o usuário faz uma pergunta, o sistema busca os vetores mais similares no Pinecone.
+
+**Geração:** O conteúdo recuperado é enviado como contexto para o Gemini, que formula a resposta final. Isso impede "alucinações" da IA sobre preços ou horários.
 
 ## Requisitos e Casos de Uso
 O sistema foi projetado para atender aos seguintes requisitos principais:
