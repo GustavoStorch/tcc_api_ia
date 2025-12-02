@@ -36,6 +36,9 @@ def handle_chat_query(
         # Chama a função principal do serviço, passando a mensagem e a sessão do DB
         result = ChatService.process_chat_query(request.query, request.session_id, request.nome_paciente, db, action_context=request.action_context)
         return result
+    except HTTPException as http_ex:
+        raise http_ex
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
