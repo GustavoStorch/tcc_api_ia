@@ -23,3 +23,6 @@ redis
 scikit-learn
 pytest
 pytest-asyncio
+pytest-html 
+pytest-cov 
+pytest-sugar
