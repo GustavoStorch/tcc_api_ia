@@ -131,13 +131,28 @@ Para garantir que o chatbot forneça informações corretas sobre a clínica, fo
 O sistema foi projetado para atender aos seguintes requisitos principais:
 
 * **RF01 - Chatbot:** Interação via Telegram para agendamentos.
+  * [Diagrama de Caso de Uso (RF01)](docs/imagem.png)
+* **RF02 - Integração com Google:** Sincronização das consultas com o Google Calendar.
+  * [Diagrama de Caso de Uso (RF02)](docs/imagem2.png)
 * **RF03 - Lembretes Inteligentes:** Envio automático considerando o padrão de comportamento do paciente (ex: pacientes que faltam muito recebem lembretes antecipados).
+  * [Diagrama de Caso de Uso (RF03)](docs/imagem3.png)
 * **RF04 - Agendamento Inteligente:** Sugestão de horários baseada no histórico.
+  * [Diagrama de Caso de Uso (RF04)](docs/imagem4.png)
 * **RF05 - Gestão de Fuso Horário:** Identificação da localização via interação direta com o paciente, com armazenamento temporário da confirmação em memória (cache de 24h) para evitar repetições desnecessárias e garantir a conversão correta dos horários.
+  * [Diagrama de Caso de Uso (RF05)](docs/imagem5.png)
 * **RF06 - Gestão Administrativa:** Painel para cadastro de horários, valores e serviços.
+  * [Diagrama de Caso de Uso (RF06)](docs/imagem6.png)
 
-> [!NOTE]
-> *Aqui serão inseridos os links para os diagramas de casos de uso.*
+### Requisitos Não Funcionais (RNF)
+Definem as restrições técnicas, padrões de qualidade e limitações do sistema:
+
+* **RNF01 - Interface Responsiva:** Interface web desenvolvida em React, adaptável para desktop e mobile.
+* **RNF02 - Backend e API:** Desenvolvido em Python 3.12 utilizando o framework FastAPI.
+* **RNF03 - Infraestrutura em Nuvem:** Arquitetura agnóstica para deploy em containers (Docker) em nuvem (AWS, Heroku).
+* **RNF04 - Segurança de Dados:** Banco de dados PostgreSQL com conexões criptografadas.
+* **RNF05 - Padronização Temporal:** Persistência de fuso horário, realização de conversão de fuso horários.
+* **RNF06 - Disponibilidade:** Arquitetura projetada para disponibilidade mínima de 99% em ambiente de produção.
+* **RNF07 - Interoperabilidade:** Comunicação via API RESTful padronizada entre Frontend, Backend e serviços de IA.
 
 ## Modelagem
 A solução segue uma arquitetura em camadas utilizando o padrão MVC (Model-View-Controller) no sistema web.
