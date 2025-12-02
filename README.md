@@ -161,7 +161,7 @@ npx n8n@latest start --tunnel
 ```
 * **Opção Cloud:** Criar uma conta diretamente no site oficial da plataforma. ([n8n.io](https://n8n.io/))
 
-Após acessar o painel do n8n, idependente da opção, é necessário importar o gluxo de trabalho (workflow), baixe o arquivo ([TCC N8N](https://github.com/GustavoStorch/tcc_api_ia/blob/main/docs/TCC%20copy.json)) disponivel no repositório.
+Após acessar o painel do n8n, idependente da opção, é necessário importar o gluxo de trabalho (workflow), baixe o arquivo ([TCC N8N](https://github.com/GustavoStorch/tcc_api_ia/blob/main/docs/TCC-n8n.json)) disponivel no repositório.
 
 ## Stacks
 * Python e JavaScript/TypeScript.
